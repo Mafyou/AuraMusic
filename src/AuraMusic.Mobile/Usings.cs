@@ -23,6 +23,7 @@ global using AuraMusic.Kernel.Codec;
 global using AuraMusic.Kernel.Diagnostics;
 global using AuraMusic.Kernel.Localization;
 global using AuraMusic.Kernel.Multipath;
+global using AuraMusic.Kernel.Navigation;
 global using AuraMusic.Kernel.Playout;
 global using AuraMusic.Kernel.Protocol;
 global using AuraMusic.Kernel.Spectrum;

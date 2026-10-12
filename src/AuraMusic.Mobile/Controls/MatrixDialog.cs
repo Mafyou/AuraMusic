@@ -1,6 +1,6 @@
 namespace AuraMusic.Mobile.Controls;
 
-/// <summary>Matrix-styled replacement for <c>DisplayAlertAsync</c>: a title, a message and one or two buttons.</summary>
+/// <summary>Matrix-styled CommunityToolkit popup used instead of the native alert: a title, a message and one or two buttons.</summary>
 public sealed class MatrixDialog : Popup<bool>
 {
     MatrixDialog(string title, string message, string accept, string? cancel)
