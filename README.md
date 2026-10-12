@@ -58,6 +58,7 @@ Hors de la maison, sans Wi-Fi commun : l'un active son partage de connexion et l
   - `Updates/` : lecture de la dernière release GitHub et comparaison des versions (une union `UpdateCheck`) ;
   - `Codec/` : encodeur et décodeur Opus (`OpusCodec`, natif ou C#) ;
   - `Localization/` : choix de la langue (FR par défaut, EN) ;
+  - `Navigation/` : `DoubleBackToExit`, le double appui sur Retour avant de quitter l'app (le premier affiche un toast, le second dans les deux secondes quitte) ;
   - `Multipath/` : fusion des liens Bluetooth et Wi-Fi (`SequenceGate`), répartition côté master (`LinkRouter`), balise réseau (`LanBeacon`) et téléphones de confiance (`TrustedDevices`).
 - `src/AuraMusic.Mobile` : l'app. Code Android dans `Platforms/Android/Casting/` (`BroadcastService` côté master, `ListenService` côté écoute).
 - `tests/AuraMusic.Kernel.Tests` : tests unitaires xUnit v3 + Shouldly + Moq.

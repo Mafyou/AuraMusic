@@ -56,6 +56,7 @@
   <data name="ErrorConnectionLost" xml:space="preserve"><value>Bluetooth connection lost: {0}</value></data>
   <data name="ErrorPairFirst" xml:space="preserve"><value>Pair the phones first in the Bluetooth settings.</value></data>
   <data name="SwitchLanguageDescription" xml:space="preserve"><value>Switch to French</value></data>
+  <data name="BackAgainToQuit" xml:space="preserve"><value>Are you sure you want to quit? Press Back again.</value></data>
   <data name="UpdateTitle" xml:space="preserve"><value>Update available</value></data>
   <data name="UpdateMessage" xml:space="preserve"><value>AuraMusic {0} is available. Install it now?</value></data>
   <data name="UpdateNow" xml:space="preserve"><value>Update</value></data>
