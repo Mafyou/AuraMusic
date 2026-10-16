@@ -37,6 +37,7 @@
         protected override async void OnAppearing()
         {
             base.OnAppearing();
+            Rain.IsPaused = false;
             AuraHub.StateChanged += OnStateChanged;
             SpectrumHub.Updated += OnSpectrum;
             Render(AuraHub.Current);
@@ -76,6 +77,7 @@
 
         protected override void OnDisappearing()
         {
+            Rain.IsPaused = true; // covered by the tutorial or the diagnostics screen, which have their own rain
             AuraHub.StateChanged -= OnStateChanged;
             SpectrumHub.Updated -= OnSpectrum;
             base.OnDisappearing();

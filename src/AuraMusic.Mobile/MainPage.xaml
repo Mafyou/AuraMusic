@@ -7,7 +7,7 @@
              Shell.NavBarIsVisible="False">
 
     <Grid>
-        <controls:MatrixRainView Opacity="0.35" />
+        <controls:MatrixRainView x:Name="Rain" Opacity="0.35" />
 
         <!-- Pull down to check for a new version. -->
         <RefreshView x:Name="UpdateRefresh" Style="{StaticResource MatrixRefresh}" Refreshing="OnPullToUpdate">
