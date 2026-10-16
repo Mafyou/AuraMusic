@@ -5,11 +5,17 @@
         // Only on launch, not when the page is rebuilt after a language switch.
         static bool splashShown, tutorialOffered, updateOffered, updating;
 
+        // Below this the logo is a smudge: better none (a 360 x 640 screen while listening).
+        const double MinArtworkHeight = 96;
+
         public MainPage()
         {
             InitializeComponent();
             // Inside the pull-to-update ScrollView the layout would collapse: give it the visible height.
             HomeScroll.SizeChanged += (_, _) => HomeLayout.HeightRequest = HomeScroll.Height;
+            // The slot's height does not depend on the artwork (a star row of a layout sized to the page), so
+            // hiding it cannot make room that would bring it back.
+            ArtworkSlot.SizeChanged += (_, _) => Artwork.IsVisible = ArtworkSlot.Height >= MinArtworkHeight;
             LanguageButton.Text = $"🌐 {AppLanguages.Next(LanguageSettings.Current).ToUpperInvariant()}";
             VersionLabel.Text = $"v{AppInfo.Current.VersionString}";
             // Nothing to pull for where the store updates the app. IsRefreshEnabled, never IsEnabled: MAUI passes

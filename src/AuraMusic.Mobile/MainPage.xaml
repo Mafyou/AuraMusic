@@ -13,7 +13,12 @@
         <RefreshView x:Name="UpdateRefresh" Style="{StaticResource MatrixRefresh}" Refreshing="OnPullToUpdate">
             <!-- RefreshView only reacts on Android when its content can scroll; the layout is sized to the page. -->
             <ScrollView x:Name="HomeScroll" VerticalScrollBarVisibility="Never" SafeAreaEdges="Container">
-                <Grid x:Name="HomeLayout" RowDefinitions="*,Auto,Auto" Padding="20,40,20,28" RowSpacing="12">
+                <!--
+                    One row each, so nothing overlaps on a small screen (360 x 640 dp): the corner buttons, the
+                    artwork, which takes most of the height left and shrinks to fit, the status card, a gap that
+                    takes the rest, then the actions at the bottom.
+                -->
+                <Grid x:Name="HomeLayout" RowDefinitions="Auto,*,Auto,0.2*,Auto,Auto" Padding="20,40,20,28" RowSpacing="12">
 
                     <Button x:Name="LanguageButton"
                             Style="{StaticResource MatrixCornerButton}"
@@ -27,28 +32,31 @@
                             SemanticProperties.Description="{x:Static strings:AppStrings.HelpDescription}"
                             Clicked="OnHelpClicked" />
 
-                    <VerticalStackLayout VerticalOptions="Center" Spacing="18">
+                    <!-- The room left for the artwork: too little (small screen, listening panel) and it is left out. -->
+                    <Grid x:Name="ArtworkSlot" Grid.Row="1">
                         <!-- Double-tap for the diagnostics screen. -->
-                        <Image Source="splash_screen.png"
-                               HeightRequest="300"
+                        <Image x:Name="Artwork"
+                               Source="splash_screen.png"
+                               MaximumHeightRequest="300"
                                Aspect="AspectFit"
                                HorizontalOptions="Center"
+                               VerticalOptions="Center"
                                SemanticProperties.Description="AuraMusic"
                                SemanticProperties.HeadingLevel="Level1">
                             <Image.GestureRecognizers>
                                 <TapGestureRecognizer NumberOfTapsRequired="2" Tapped="OnArtworkDoubleTapped" />
                             </Image.GestureRecognizers>
                         </Image>
+                    </Grid>
 
-                        <Border Style="{StaticResource MatrixPanelBorder}">
-                            <VerticalStackLayout Spacing="8">
-                                <Label x:Name="StatusLabel" Style="{StaticResource MatrixStatus}" />
-                                <Label x:Name="HintLabel" Style="{StaticResource MatrixBody}" />
-                            </VerticalStackLayout>
-                        </Border>
-                    </VerticalStackLayout>
+                    <Border Grid.Row="2" Style="{StaticResource MatrixPanelBorder}" VerticalOptions="Start">
+                        <VerticalStackLayout Spacing="8">
+                            <Label x:Name="StatusLabel" Style="{StaticResource MatrixStatus}" />
+                            <Label x:Name="HintLabel" Style="{StaticResource MatrixBody}" />
+                        </VerticalStackLayout>
+                    </Border>
 
-                    <VerticalStackLayout x:Name="ModeButtons" Grid.Row="1" Spacing="12">
+                    <VerticalStackLayout x:Name="ModeButtons" Grid.Row="4" Spacing="12">
                         <Button Text="{x:Static strings:AppStrings.BroadcastButton}"
                                 Style="{StaticResource MatrixPrimaryButton}"
                                 Clicked="OnBroadcastClicked" />
@@ -58,7 +66,7 @@
                                 Clicked="OnListenClicked" />
                     </VerticalStackLayout>
 
-                    <VerticalStackLayout x:Name="ActivePanel" Grid.Row="2" Spacing="12">
+                    <VerticalStackLayout x:Name="ActivePanel" Grid.Row="5" Spacing="12">
                         <controls:SpectrumView x:Name="Spectrum" HeightRequest="120" />
 
                         <!-- Listening only: how much audio to keep in hand. Left is closer to the master's own sound. -->
