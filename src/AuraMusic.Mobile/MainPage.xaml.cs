@@ -3,7 +3,7 @@
     public partial class MainPage : ContentPage
     {
         // Only on launch, not when the page is rebuilt after a language switch.
-        static bool splashShown, updateOffered, updating;
+        static bool splashShown, tutorialOffered, updateOffered, updating;
 
         public MainPage()
         {
@@ -51,8 +51,11 @@
                 SplashOverlay.IsVisible = false;
             }
 
-            if (!TutorialPage.HasBeenSeen && Navigation.ModalStack.Count == 0)
+            // Once per launch: this page appears again when the tutorial closes, and must not reopen it then
+            // even if it was dismissed in a way that did not mark it seen.
+            if (!TutorialPage.HasBeenSeen && !tutorialOffered && Navigation.ModalStack.Count == 0)
             {
+                tutorialOffered = true;
                 var tutorial = new TutorialPage();
                 await Navigation.PushModalAsync(tutorial);
                 await tutorial.Closed; // a first launch must be offered updates too, once the tutorial is done
