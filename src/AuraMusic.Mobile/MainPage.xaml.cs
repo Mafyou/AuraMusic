@@ -12,7 +12,10 @@
             HomeScroll.SizeChanged += (_, _) => HomeLayout.HeightRequest = HomeScroll.Height;
             LanguageButton.Text = $"🌐 {AppLanguages.Next(LanguageSettings.Current).ToUpperInvariant()}";
             VersionLabel.Text = $"v{AppInfo.Current.VersionString}";
-            UpdateRefresh.IsEnabled = AppUpdater.SelfUpdates; // nothing to pull for where the store updates the app
+            // Nothing to pull for where the store updates the app. IsRefreshEnabled, never IsEnabled: MAUI passes
+            // IsEnabled down to every child, and the RefreshView holds the whole home screen, so a disabled one
+            // left every button of the Play Store build dead to taps (seen on Android 17).
+            UpdateRefresh.IsRefreshEnabled = AppUpdater.SelfUpdates;
 #if DEBUG
             // A test build shows the version being worked on, not a published one, and never updates itself.
             VersionLabel.Text += " · dev";
@@ -32,13 +35,21 @@
             SpectrumHub.Updated += OnSpectrum;
             Render(AuraHub.Current);
 
-            if (!splashShown)
+            try
             {
-                splashShown = true;
-                await Task.Delay(TimeSpan.FromSeconds(2));
-                await SplashOverlay.FadeToAsync(0, 400);
+                if (!splashShown)
+                {
+                    splashShown = true;
+                    await Task.Delay(TimeSpan.FromSeconds(2));
+                    await SplashOverlay.FadeToAsync(0, 400);
+                }
             }
-            SplashOverlay.IsVisible = false;
+            finally
+            {
+                // The splash covers the whole page, even faded to nothing: it must leave the layout whatever
+                // became of the fade, and on every later appearance (back from the tutorial, the diagnostics).
+                SplashOverlay.IsVisible = false;
+            }
 
             if (!TutorialPage.HasBeenSeen && Navigation.ModalStack.Count == 0)
             {
