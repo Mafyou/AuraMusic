@@ -56,6 +56,7 @@
   <data name="ErrorConnectionLost" xml:space="preserve"><value>Connexion Bluetooth perdue : {0}</value></data>
   <data name="ErrorPairFirst" xml:space="preserve"><value>Appairez d'abord les téléphones dans les réglages Bluetooth.</value></data>
   <data name="SwitchLanguageDescription" xml:space="preserve"><value>Passer en anglais</value></data>
+  <data name="WifiPermissionDenied" xml:space="preserve"><value>Wi-Fi refusé : la musique passe par le Bluetooth seulement.</value></data>
   <data name="BackAgainToQuit" xml:space="preserve"><value>Êtes-vous sûr de vouloir quitter ? Appuyez de nouveau sur Retour.</value></data>
   <data name="UpdateTitle" xml:space="preserve"><value>Mise à jour disponible</value></data>
   <data name="UpdateMessage" xml:space="preserve"><value>AuraMusic {0} est disponible. Installer maintenant ?</value></data>

@@ -7,6 +7,12 @@ namespace AuraMusic.Mobile
 
         TaskCompletionSource<(Result ResultCode, Intent? Data)>? mediaProjectionRequest;
 
+        protected override void OnCreate(Bundle? savedInstanceState)
+        {
+            base.OnCreate(savedInstanceState);
+            BackKey.GiveToTheApp(this); // after base.OnCreate: asked before MAUI's own callback
+        }
+
         /// <summary>Shows the system "start recording or casting" consent dialog required for playback capture.</summary>
         public Task<(Result ResultCode, Intent? Data)> RequestMediaProjectionAsync()
         {

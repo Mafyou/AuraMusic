@@ -43,11 +43,34 @@ namespace AuraMusic.Mobile
 
         async void OnDoneClicked(object? sender, EventArgs e) => await CloseAsync();
 
+        /// <summary>
+        /// Back (the key or the edge swipe) closes the tutorial like "Skip". Left to MAUI, Back popped the page
+        /// without marking it seen, and the home page, appearing again, opened the first-launch tutorial anew:
+        /// Back seemed to do nothing and the swipe slid the tutorial away only for it to come back.
+        /// </summary>
+        protected override bool OnBackButtonPressed()
+        {
+            _ = CloseAsync();
+            return true;
+        }
+
+        bool closing;
+
         async Task CloseAsync()
         {
+            // Skip, the last Next and Back can come together: the page is popped once.
+            if (closing)
+                return;
+            closing = true;
             Preferences.Set(SeenKey, true);
-            await Navigation.PopModalAsync();
-            closed.TrySetResult();
+            try
+            {
+                await Navigation.PopModalAsync();
+            }
+            finally
+            {
+                closed.TrySetResult();
+            }
         }
     }
 }

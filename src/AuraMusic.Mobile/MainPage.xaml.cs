@@ -3,16 +3,25 @@
     public partial class MainPage : ContentPage
     {
         // Only on launch, not when the page is rebuilt after a language switch.
-        static bool splashShown, updateOffered, updating;
+        static bool splashShown, tutorialOffered, updateOffered, updating;
+
+        // Below this the logo is a smudge: better none (a 360 x 640 screen while listening).
+        const double MinArtworkHeight = 96;
 
         public MainPage()
         {
             InitializeComponent();
             // Inside the pull-to-update ScrollView the layout would collapse: give it the visible height.
             HomeScroll.SizeChanged += (_, _) => HomeLayout.HeightRequest = HomeScroll.Height;
+            // The slot's height does not depend on the artwork (a star row of a layout sized to the page), so
+            // hiding it cannot make room that would bring it back.
+            ArtworkSlot.SizeChanged += (_, _) => Artwork.IsVisible = ArtworkSlot.Height >= MinArtworkHeight;
             LanguageButton.Text = $"🌐 {AppLanguages.Next(LanguageSettings.Current).ToUpperInvariant()}";
             VersionLabel.Text = $"v{AppInfo.Current.VersionString}";
-            UpdateRefresh.IsEnabled = AppUpdater.SelfUpdates; // nothing to pull for where the store updates the app
+            // Nothing to pull for where the store updates the app. IsRefreshEnabled, never IsEnabled: MAUI passes
+            // IsEnabled down to every child, and the RefreshView holds the whole home screen, so a disabled one
+            // left every button of the Play Store build dead to taps (seen on Android 17).
+            UpdateRefresh.IsRefreshEnabled = AppUpdater.SelfUpdates;
 #if DEBUG
             // A test build shows the version being worked on, not a published one, and never updates itself.
             VersionLabel.Text += " · dev";
@@ -28,20 +37,32 @@
         protected override async void OnAppearing()
         {
             base.OnAppearing();
+            Rain.IsPaused = false;
             AuraHub.StateChanged += OnStateChanged;
             SpectrumHub.Updated += OnSpectrum;
             Render(AuraHub.Current);
 
-            if (!splashShown)
+            try
             {
-                splashShown = true;
-                await Task.Delay(TimeSpan.FromSeconds(2));
-                await SplashOverlay.FadeToAsync(0, 400);
+                if (!splashShown)
+                {
+                    splashShown = true;
+                    await Task.Delay(TimeSpan.FromSeconds(2));
+                    await SplashOverlay.FadeToAsync(0, 400);
+                }
             }
-            SplashOverlay.IsVisible = false;
-
-            if (!TutorialPage.HasBeenSeen && Navigation.ModalStack.Count == 0)
+            finally
             {
+                // The splash covers the whole page, even faded to nothing: it must leave the layout whatever
+                // became of the fade, and on every later appearance (back from the tutorial, the diagnostics).
+                SplashOverlay.IsVisible = false;
+            }
+
+            // Once per launch: this page appears again when the tutorial closes, and must not reopen it then
+            // even if it was dismissed in a way that did not mark it seen.
+            if (!TutorialPage.HasBeenSeen && !tutorialOffered && Navigation.ModalStack.Count == 0)
+            {
+                tutorialOffered = true;
                 var tutorial = new TutorialPage();
                 await Navigation.PushModalAsync(tutorial);
                 await tutorial.Closed; // a first launch must be offered updates too, once the tutorial is done
@@ -56,6 +77,7 @@
 
         protected override void OnDisappearing()
         {
+            Rain.IsPaused = true; // covered by the tutorial or the diagnostics screen, which have their own rain
             AuraHub.StateChanged -= OnStateChanged;
             SpectrumHub.Updated -= OnSpectrum;
             base.OnDisappearing();

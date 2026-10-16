@@ -66,9 +66,35 @@ public sealed class DoubleBackToExitTests
         sut.ConfirmsExit();
         Wait(500);
         sut.ConfirmsExit().ShouldBeTrue();
-        Wait(500);
+        Wait(600);
 
         sut.ConfirmsExit().ShouldBeFalse();
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(100)]
+    [InlineData(500)]
+    public void ConfirmingPressHandedOverAgain_StillLeaves(double delayInMilliseconds)
+    {
+        // MAUI's Shell then the activity's Back callback can both be asked about the same press.
+        sut.ConfirmsExit();
+        Wait(300);
+        sut.ConfirmsExit().ShouldBeTrue();
+        Wait(delayInMilliseconds);
+
+        sut.ConfirmsExit().ShouldBeTrue();
+    }
+
+    [Fact]
+    public void PressAfterTheSamePressWindow_AsksAgain()
+    {
+        sut.ConfirmsExit();
+        sut.ConfirmsExit().ShouldBeTrue();
+        Wait(DoubleBackToExit.SamePress.TotalMilliseconds + 1);
+
+        sut.ConfirmsExit().ShouldBeFalse();
+        DoubleBackToExit.SamePress.ShouldBe(TimeSpan.FromMilliseconds(500));
     }
 
     [Fact]

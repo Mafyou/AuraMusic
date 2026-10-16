@@ -41,6 +41,12 @@ public static class AuraController
                 ? AppStrings.ErrorPermissionsBroadcast
                 : AppStrings.ErrorPermissionsListen);
 
-        await new WifiPermission().RequestAsync(); // optional: refused, Bluetooth alone carries the stream
+        // Optional: refused, Bluetooth alone carries the stream. Said plainly, or two phones that only share a
+        // Wi-Fi network would search for each other forever without a clue why. Short: Android cuts a toast at
+        // two lines.
+        if (await new WifiPermission().RequestAsync() != PermissionStatus.Granted)
+            await CommunityToolkit.Maui.Alerts.Toast
+                .Make(AppStrings.WifiPermissionDenied, CommunityToolkit.Maui.Core.ToastDuration.Long)
+                .Show();
     }
 }
