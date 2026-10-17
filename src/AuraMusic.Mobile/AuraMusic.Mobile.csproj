@@ -54,7 +54,7 @@
 	<ItemGroup>
 		<!-- App Icon -->
 		<!-- The logo sits on its own dark green, scaled so the outer phones stay inside round launcher masks. -->
-		<MauiIcon Include="Resources\AppIcon\appicon.svg" ForegroundFile="Resources\AppIcon\appiconfg.svg" Color="#04140E" />
+		<MauiIcon Include="Resources\AppIcon\appicon.svg" ForegroundFile="Resources\AppIcon\appiconfg.svg" Color="#000C08" />
 
 		<!-- Splash Screen -->
 		<MauiSplashScreen Include="Resources\Splash\splash.svg" Color="#000C08" />
