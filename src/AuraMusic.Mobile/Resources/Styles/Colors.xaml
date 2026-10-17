@@ -9,7 +9,7 @@
         Four build-time files cannot read this dictionary and repeat a value by hand:
         the system splash colour in AuraMusic.Mobile.csproj and Resources/Splash/splash.svg (MatrixBackground),
         Android's theme in Platforms/Android/Resources/values/colors.xml (MatrixBackground, MatrixGreen),
-        and the launcher icon background in Resources/AppIcon/appicon.svg (#000B06, the icon artwork's own black).
+        and the launcher icon background in Resources/AppIcon/appicon.svg and the MauiIcon Color (#04140E, the flat icon's dark green behind appiconfg.svg).
     -->
 
     <!-- Surfaces -->

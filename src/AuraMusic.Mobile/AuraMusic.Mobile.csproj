@@ -28,7 +28,7 @@
 			publishes exactly that number. The version code Android and the Play Store compare follows from it
 			(1.7.8 gives 10708), so it grows with every release, wherever the build is made.
 		-->
-		<ApplicationDisplayVersion>1.7.9</ApplicationDisplayVersion>
+		<ApplicationDisplayVersion>1.7.10</ApplicationDisplayVersion>
 		<VersionMajor>$([System.Version]::Parse('$(ApplicationDisplayVersion)').Major)</VersionMajor>
 		<VersionMinor>$([System.Version]::Parse('$(ApplicationDisplayVersion)').Minor)</VersionMinor>
 		<VersionPatch>$([System.Version]::Parse('$(ApplicationDisplayVersion)').Build)</VersionPatch>
@@ -54,7 +54,7 @@
 	<ItemGroup>
 		<!-- App Icon -->
 		<!-- The logo sits on its own dark green, scaled so the outer phones stay inside round launcher masks. -->
-		<MauiIcon Include="Resources\AppIcon\appicon.svg" ForegroundFile="Resources\AppIcon\appiconfg.png" ForegroundScale="0.62" />
+		<MauiIcon Include="Resources\AppIcon\appicon.svg" ForegroundFile="Resources\AppIcon\appiconfg.svg" Color="#04140E" />
 
 		<!-- Splash Screen -->
 		<MauiSplashScreen Include="Resources\Splash\splash.svg" Color="#000C08" />
