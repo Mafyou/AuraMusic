@@ -1,6 +1,7 @@
 namespace AuraMusic.Mobile;
 
-/// <summary>Applies the language the user picked (or the phone's) to every resource lookup.</summary>
+/// <summary>Applies the language the user picked (or, on a first launch, English for an English phone and French for
+/// any other) to every resource lookup.</summary>
 static class LanguageSettings
 {
     const string PreferenceKey = "language";
@@ -21,9 +22,12 @@ static class LanguageSettings
 
     static void Apply(string language)
     {
-        var culture = CultureInfo.GetCultureInfo(language);
-        CultureInfo.DefaultThreadCurrentUICulture = culture; // background services too
+        // Texts and formats alike: a German phone runs the app in French, never in German.
+        var culture = AppLanguages.CultureFor(language, DeviceCulture);
+        CultureInfo.DefaultThreadCurrentCulture = culture; // background services too
+        CultureInfo.DefaultThreadCurrentUICulture = culture;
+        CultureInfo.CurrentCulture = culture;
         CultureInfo.CurrentUICulture = culture;
-        Current = language;
+        Current = AppLanguages.FromCode(language);
     }
 }
