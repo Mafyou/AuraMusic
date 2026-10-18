@@ -5,6 +5,8 @@ Une alternative maison à LE Audio Auracast pour les téléphones qui ne le supp
 
 Le téléphone **master** joue sa musique (YouTube Music, YouTube, ou toute app qui laisse capter son audio) et les téléphones qui **écoutent** entendent la même chose, avec un léger décalage (environ 200 ms de tampon plus la latence Bluetooth).
 
+**Télécharger** : [AuraMusic sur Google Play](https://play.google.com/store/apps/details?id=fr.mafyou.auramusic), ou l'APK des [releases GitHub](https://github.com/Mafyou/AuraMusic/releases) (voir [Deux distributions](#deux-distributions)).
+
 ## Utilisation
 
 1. **Une seule fois** : appairer les téléphones dans *Réglages › Bluetooth*.
@@ -111,6 +113,7 @@ Le code de version (celui qu'Android et le Play Store comparent) se déduit du n
 
 | | GitHub | Play Store |
 |---|---|---|
+| Lien | [releases](https://github.com/Mafyou/AuraMusic/releases) | [fr.mafyou.auramusic](https://play.google.com/store/apps/details?id=fr.mafyou.auramusic) |
 | Format | APK | AAB |
 | Mise à jour | par l'app, depuis les releases GitHub | par le Play Store |
 | Permission d'installer des paquets | oui | non (le Play Store la refuse) |
