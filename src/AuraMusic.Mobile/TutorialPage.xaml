@@ -23,13 +23,18 @@
                           PositionChanged="OnPositionChanged">
                 <CarouselView.ItemTemplate>
                     <DataTemplate x:DataType="local:TutorialStep">
-                        <Border Style="{DynamicResource MatrixPanelBorder}" VerticalOptions="Center" Margin="4,0">
-                            <VerticalStackLayout Spacing="18">
-                                <Label Text="{Binding Emoji}" Style="{DynamicResource MatrixEmoji}" />
-                                <Label Text="{Binding Title}" Style="{DynamicResource MatrixSubtitle}" />
-                                <Label Text="{Binding Text}" Style="{DynamicResource MatrixBodyCentered}" />
-                            </VerticalStackLayout>
-                        </Border>
+                        <!-- Centered as tall as the card, it scrolls once the card outruns the room: on a short window
+                             (the outer screen of a foldable, 410 units tall) the end of a long step was cut off. The
+                             emoji only decorates and gives way there. -->
+                        <ScrollView VerticalOptions="Center">
+                            <Border Style="{DynamicResource MatrixPanelBorder}" Margin="4,0">
+                                <VerticalStackLayout Spacing="18">
+                                    <Label Text="{Binding Emoji}" Style="{DynamicResource MatrixEmoji}" controls:ScreenFit.TallOnly="True" />
+                                    <Label Text="{Binding Title}" Style="{DynamicResource MatrixSubtitle}" />
+                                    <Label Text="{Binding Text}" Style="{DynamicResource MatrixBodyCentered}" />
+                                </VerticalStackLayout>
+                            </Border>
+                        </ScrollView>
                     </DataTemplate>
                 </CarouselView.ItemTemplate>
             </CarouselView>
