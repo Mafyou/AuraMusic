@@ -82,6 +82,14 @@ sealed class ListenerLink(Stream input, Stream output, Links kind, Action close)
             input.ReadTimeout = Timeout.Infinite;
         new Thread(Listen) { IsBackground = true, Name = $"AuraMusic from {kind}" }.Start();
 
+        // The loop below only checks the silence between writes: a write stuck on a listener that went out of range
+        // would wait for Bluetooth's own timeout. Closing the link from here unblocks the write and the read alike.
+        using var watchdog = new Timer(_ =>
+        {
+            if (WentSilent())
+                close();
+        }, null, KeepAliveInterval, KeepAliveInterval);
+
         // Send whatever has queued up as a single write: batches grow by themselves
         // when the link falls behind, which costs far less than one write per frame.
         var batch = new MemoryStream();
