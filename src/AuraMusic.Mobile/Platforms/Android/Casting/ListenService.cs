@@ -31,6 +31,9 @@ public sealed class ListenService : Service
     // The master sends audio or a keep-alive at least every second: a link silent for this long is dead,
     // even if the socket has not noticed (Wi-Fi lost, phone out of range).
     static readonly TimeSpan LinkTimeout = TimeSpan.FromSeconds(5);
+    // How often this phone writes its keep-alive to the master: well within the seconds after which Android puts
+    // a Bluetooth link this phone does not write to into sniff mode.
+    static readonly TimeSpan AliveInterval = TimeSpan.FromSeconds(1);
 
     // The playback rate is only touched for a real change: each call crosses into the audio system.
     const int MinRateStepHz = 2;
@@ -263,12 +266,31 @@ public sealed class ListenService : Service
         AuraProtocol.WriteHello(output, new Hello(DeviceName.Id, DeviceName.Of(this)));
 
         // A dead link does not always fail the read: close it ourselves when even keep-alives stop coming.
+        // Meanwhile, say we are still here, which above all keeps this phone's side of Bluetooth awake.
         long lastHeard = Environment.TickCount64;
+        int saying = 0;
         using var watchdog = new Timer(_ =>
         {
             if (Environment.TickCount64 - Interlocked.Read(ref lastHeard) > LinkTimeout.TotalMilliseconds)
+            {
                 close();
-        }, null, LinkTimeout, TimeSpan.FromSeconds(1));
+                return;
+            }
+            if (Interlocked.Exchange(ref saying, 1) == 1)
+                return; // the previous one is still held up by a stalled radio
+            try
+            {
+                AuraProtocol.WriteListenerAlive(output);
+            }
+            catch (Exception)
+            {
+                // The link is going down: the read below finds out.
+            }
+            finally
+            {
+                Volatile.Write(ref saying, 0);
+            }
+        }, null, AliveInterval, AliveInterval);
 
         // Up only once the master has sent something: it closes the link right after the hello when it does
         // not admit this phone (Wi-Fi before any Bluetooth connection), and that must not flash "connected".

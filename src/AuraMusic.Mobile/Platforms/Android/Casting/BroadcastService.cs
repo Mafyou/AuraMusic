@@ -88,7 +88,7 @@ public sealed class BroadcastService : Service
 
         cts = new CancellationTokenSource();
         var stoppingToken = cts.Token;
-        _ = Task.Run(() => AcceptLoop(stoppingToken));
+        new Thread(() => AcceptLoop(stoppingToken)) { IsBackground = true, Name = "AuraMusic accept" }.Start();
         StartLan(stoppingToken);
         captureThread = new Thread(() => CaptureLoop(stoppingToken)) { IsBackground = true, Name = "AuraMusic capture" };
         captureThread.Start();
@@ -134,9 +134,16 @@ public sealed class BroadcastService : Service
         }
     }
 
-    void AddListener(ListenerLink link, CancellationToken stoppingToken)
+    /// <summary>
+    /// Each link gets a thread of its own: its handshake and its writes block for as long as the radio stalls,
+    /// and on the shared thread pool a few stalled listeners could hold up the encoder, and so everybody else.
+    /// </summary>
+    void AddListener(ListenerLink link, CancellationToken stoppingToken) =>
+        new Thread(() => Serve(link, stoppingToken)) { IsBackground = true, Name = $"AuraMusic to {link.Kind}" }.Start();
+
+    void Serve(ListenerLink link, CancellationToken stoppingToken)
     {
-        _ = Task.Run(async () =>
+        try
         {
             var hello = link.Handshake(session);
             if (!Admit(link.Kind, hello))
@@ -148,15 +155,22 @@ public sealed class BroadcastService : Service
             lock (listeners)
                 listeners.Add(link);
             PublishListeners();
-            await link.Run(stoppingToken);
-        }, stoppingToken).ContinueWith(_ =>
+            link.Run(stoppingToken);
+        }
+        catch (Exception ex)
+        {
+            // The listener left or went out of range, or stopping closed the link under this thread.
+            if (!stoppingToken.IsCancellationRequested)
+                Log.Info(AuraLog.Tag, $"{link.Name} {link.Kind} gone: {ex.Message}");
+        }
+        finally
         {
             lock (listeners)
                 listeners.Remove(link);
             link.Dispose();
             if (!stoppingToken.IsCancellationRequested)
                 PublishListeners();
-        }, TaskScheduler.Default);
+        }
     }
 
     /// <summary>A Bluetooth connection proves the phone is paired, and earns it Wi-Fi access from then on.</summary>
@@ -287,10 +301,11 @@ public sealed class BroadcastService : Service
                 (statuses, carries) = (new LinkStatus[targets.Length], new bool[targets.Length]);
             for (int i = 0; i < targets.Length; i++)
                 statuses[i] = new LinkStatus(targets[i].Id, targets[i].Kind, targets[i].IsHealthyWifi);
-            bool allOnWifi = LinkRouter.Plan(statuses.AsSpan(0, targets.Length), carries);
+            var plan = LinkRouter.Plan(statuses.AsSpan(0, targets.Length), carries);
 
-            // More quality when Wi-Fi carries everyone; back to the Bluetooth-safe bitrate otherwise.
-            int wanted = allOnWifi ? AuraProtocol.WifiBitrate : AuraProtocol.Bitrate;
+            // More quality when Wi-Fi carries everyone; back to the Bluetooth-safe bitrate otherwise, and lower
+            // still when more than two listeners share the master's Bluetooth radio.
+            int wanted = plan.Bitrate;
             if (wanted != bitrate)
                 encoder.Bitrate = bitrate = wanted;
 
