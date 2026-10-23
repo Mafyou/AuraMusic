@@ -17,6 +17,10 @@ public sealed class MatrixDialog : Popup<bool>
         }
         buttons.Add(CreateButton(accept, "MatrixDialogPrimaryButton", result: true), cancel is null ? 0 : 1);
 
+        // A long message scrolls, the buttons stay in view: on a short window (the outer screen of a foldable,
+        // 410 units tall) it pushed them below the bottom edge.
+        var messageScroll = new ScrollView { Content = new Label { Text = message, Style = Theme.Style("MatrixBody") } };
+
         Content = new Border
         {
             Style = Theme.Style("MatrixDialogBorder"),
@@ -26,12 +30,19 @@ public sealed class MatrixDialog : Popup<bool>
                 Children =
                 {
                     new Label { Text = $"> {title}", Style = Theme.Style("MatrixStatus") },
-                    new Label { Text = message, Style = Theme.Style("MatrixBody") },
+                    messageScroll,
                     buttons,
                 },
             },
         };
+
+        // Measured on the window of the app, again each time it changes size (a foldable closed, a phone turned).
+        ScreenFit.FollowWindow(this, () =>
+            messageScroll.MaximumHeightRequest = PopupFit.ScrollableHeight(ScreenFit.WindowHeight(), AroundMessage, preferred: double.PositiveInfinity));
     }
+
+    // Around the message: two lines of title (50), the buttons (58), the spaces between them (28) and the paddings (36).
+    const double AroundMessage = 172;
 
     /// <returns><see langword="true"/> when the user picked <paramref name="accept"/>.</returns>
     public static async Task<bool> ShowAsync(Page page, string title, string message, string accept, string? cancel = null)

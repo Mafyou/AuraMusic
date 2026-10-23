@@ -12,7 +12,8 @@
         {
             InitializeComponent();
             // Inside the pull-to-update ScrollView the layout would collapse: give it the visible height.
-            HomeScroll.SizeChanged += (_, _) => HomeLayout.HeightRequest = HomeScroll.Height;
+            HomeScroll.SizeChanged += (_, _) => FitHomeLayout();
+            ScreenFit.FollowWindow(this, FitHomeLayout);
             // The slot's height does not depend on the artwork (a star row of a layout sized to the page), so
             // hiding it cannot make room that would bring it back.
             ArtworkSlot.SizeChanged += (_, _) => Artwork.IsVisible = ArtworkSlot.Height >= MinArtworkHeight;
@@ -32,6 +33,19 @@
             SyncSlider.Value = PlayoutTuning.TargetLatencyMs;
             ShowSync(PlayoutTuning.TargetLatencyMs);
             Render(AuraHub.Current);
+        }
+
+        /// <summary>
+        /// The layout takes the visible height, its artwork shrinking to fit. Not on a short window (the outer screen
+        /// of a foldable, 480 x 410): there what it holds is taller than the window, and a layout of that height cut
+        /// off its own bottom, the Stop button of the listening panel out of reach. The artwork gives way and the
+        /// layout takes the height of what it holds, which scrolls.
+        /// </summary>
+        void FitHomeLayout()
+        {
+            bool isShort = ScreenFit.IsShort();
+            ArtworkSlot.IsVisible = !isShort;
+            HomeLayout.HeightRequest = isShort ? -1 : HomeScroll.Height;
         }
 
         protected override async void OnAppearing()

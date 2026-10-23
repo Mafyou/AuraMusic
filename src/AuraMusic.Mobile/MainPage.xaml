@@ -67,7 +67,9 @@
                     </VerticalStackLayout>
 
                     <VerticalStackLayout x:Name="ActivePanel" Grid.Row="5" Spacing="12">
-                        <controls:SpectrumView x:Name="Spectrum" HeightRequest="120" />
+                        <!-- Hidden on a short window (the outer screen of a foldable): even 56 high it kept Stop under
+                             the bottom edge while listening; the status card above still says what is happening. -->
+                        <controls:SpectrumView x:Name="Spectrum" HeightRequest="120" controls:ScreenFit.TallOnly="True" />
 
                         <!-- Listening only: how much audio to keep in hand. Left is closer to the master's own sound. -->
                         <Grid x:Name="SyncPanel" ColumnDefinitions="Auto,*,Auto" RowDefinitions="Auto,Auto" ColumnSpacing="8">
