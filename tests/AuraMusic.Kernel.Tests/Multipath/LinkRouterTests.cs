@@ -5,11 +5,46 @@ public sealed class LinkRouterTests
     static readonly Guid Nord2 = Guid.Parse("11111111-1111-1111-1111-111111111111");
     static readonly Guid OnePlus7 = Guid.Parse("22222222-2222-2222-2222-222222222222");
 
+    static readonly Guid Pixel = Guid.Parse("33333333-3333-3333-3333-333333333333");
+
     static (bool[] Carries, bool AllOnWifi) Plan(params LinkStatus[] links)
     {
         var carries = new bool[links.Length];
-        bool allOnWifi = LinkRouter.Plan(links, carries);
-        return (carries, allOnWifi);
+        var plan = LinkRouter.Plan(links, carries);
+        return (carries, plan.AllOnWifi);
+    }
+
+    static RoutePlan PlanOf(params LinkStatus[] links) => LinkRouter.Plan(links, new bool[links.Length]);
+
+    [Fact]
+    public void ThreeBluetoothListeners_ShareTheRadioAtALowerBitrate()
+    {
+        var plan = PlanOf(
+            new LinkStatus(Nord2, Links.Bluetooth, false),
+            new LinkStatus(OnePlus7, Links.Bluetooth, false),
+            new LinkStatus(Pixel, Links.Bluetooth, false));
+
+        plan.BluetoothCarriers.ShouldBe(3);
+        plan.Bitrate.ShouldBeLessThan(AuraProtocol.Bitrate);
+    }
+
+    [Fact]
+    public void BluetoothResting_BehindWifi_DoesNotCountAgainstTheRadio()
+    {
+        var plan = PlanOf(
+            new LinkStatus(Nord2, Links.Bluetooth, false),
+            new LinkStatus(Nord2, Links.Wifi, true),
+            new LinkStatus(OnePlus7, Links.Bluetooth, false),
+            new LinkStatus(Pixel, Links.Bluetooth, false));
+
+        plan.BluetoothCarriers.ShouldBe(2);
+        plan.Bitrate.ShouldBe(AuraProtocol.Bitrate);
+    }
+
+    [Fact]
+    public void EveryoneOnHealthyWifi_UsesTheWifiBitrate()
+    {
+        PlanOf(new LinkStatus(Nord2, Links.Wifi, true)).Bitrate.ShouldBe(AuraProtocol.WifiBitrate);
     }
 
     [Fact]

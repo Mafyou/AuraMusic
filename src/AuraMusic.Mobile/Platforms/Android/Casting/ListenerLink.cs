@@ -4,8 +4,8 @@ namespace AuraMusic.Mobile.Casting;
 readonly record struct EncodedFrame(uint Sequence, byte[] Packet);
 
 /// <summary>
-/// One connected listener, over Bluetooth or Wi-Fi, with its own small queue so a slow link never stalls
-/// the capture or the other listeners. A phone connected both ways has two of these, with the same <see cref="Id"/>.
+/// One connected listener, over Bluetooth or Wi-Fi, with its own small queue and its own threads so a slow link
+/// never stalls the capture or the other listeners. A phone connected both ways has two of these, with the same <see cref="Id"/>.
 /// </summary>
 sealed class ListenerLink(Stream input, Stream output, Links kind, Action close) : IDisposable
 {
@@ -15,6 +15,14 @@ sealed class ListenerLink(Stream input, Stream output, Links kind, Action close)
     const int HealthyQueueDepth = 2;
     static readonly TimeSpan HealthyAfter = TimeSpan.FromSeconds(3);
     static readonly TimeSpan KeepAliveInterval = TimeSpan.FromSeconds(1);
+    // A listener that sent its keep-alive (AuraProtocol.WriteListenerAlive) and then stopped has gone:
+    // Bluetooth would otherwise only notice at its supervision timeout, some twenty seconds later.
+    const int SilentListenerMs = 6_000;
+
+    // Bluetooth gets three packets per write rather than one every 20 ms: fewer, fuller radio packets take less
+    // airtime, which the other listeners share. 40 ms more delay is nothing next to the Bluetooth cushion.
+    const int BluetoothFramesPerWrite = 3;
+    const int BluetoothGatherMs = (BluetoothFramesPerWrite - 1) * PlayoutTuning.FrameMs;
 
     // A second of audio, to lose nothing over a radio stall (the listener gets back in step by itself);
     // beyond that the oldest frames are dropped rather than drift behind.
@@ -24,6 +32,7 @@ sealed class ListenerLink(Stream input, Stream output, Links kind, Action close)
     long readyAt;
     int dropped;
     int sentTotal, sentReported;
+    long lastHeard; // 0 until the listener first sends its keep-alive: older versions never do
 
     public Links Kind => kind;
 
@@ -65,8 +74,22 @@ sealed class ListenerLink(Stream input, Stream output, Links kind, Action close)
         queue.Writer.TryWrite(frame);
     }
 
-    public async Task Run(CancellationToken stoppingToken)
+    /// <summary>Sends the stream until the link drops. Blocking: runs on the link's own thread.</summary>
+    public void Run(CancellationToken stoppingToken)
     {
+        // The hello is in: from now on silence is judged on the listener's keep-alives, not on a read timeout.
+        if (input.CanTimeout)
+            input.ReadTimeout = Timeout.Infinite;
+        new Thread(Listen) { IsBackground = true, Name = $"AuraMusic from {kind}" }.Start();
+
+        // The loop below only checks the silence between writes: a write stuck on a listener that went out of range
+        // would wait for Bluetooth's own timeout. Closing the link from here unblocks the write and the read alike.
+        using var watchdog = new Timer(_ =>
+        {
+            if (WentSilent())
+                close();
+        }, null, KeepAliveInterval, KeepAliveInterval);
+
         // Send whatever has queued up as a single write: batches grow by themselves
         // when the link falls behind, which costs far less than one write per frame.
         var batch = new MemoryStream();
@@ -74,22 +97,22 @@ sealed class ListenerLink(Stream input, Stream output, Links kind, Action close)
         int sent = 0, writes = 0;
         var writing = TimeSpan.Zero;
         Task<bool>? waiting = null;
-        while (true)
+        while (!WentSilent())
         {
             // No sound to send (music paused, or this link idles behind a healthy Wi-Fi one): a keep-alive every
             // second tells the listener the link is quiet, not dead, and lets a dead one fail on write.
             waiting ??= queue.Reader.WaitToReadAsync(stoppingToken).AsTask();
-            try
-            {
-                if (!await waiting.WaitAsync(KeepAliveInterval, stoppingToken))
-                    return;
-                waiting = null;
-            }
-            catch (TimeoutException)
+            if (Task.WaitAny([waiting], KeepAliveInterval) < 0)
             {
                 AuraProtocol.WriteKeepAlive(output);
                 continue;
             }
+            if (!waiting.IsCompletedSuccessfully || !waiting.Result)
+                return; // stopping, or this link was closed
+            waiting = null;
+
+            if (kind == Links.Bluetooth && queue.Reader.Count < BluetoothFramesPerWrite)
+                Thread.Sleep(BluetoothGatherMs);
 
             batch.SetLength(0);
             for (int count = 0; count < MaxFramesPerWrite && queue.Reader.TryRead(out var frame); count++)
@@ -115,6 +138,27 @@ sealed class ListenerLink(Stream input, Stream output, Links kind, Action close)
                 writing = TimeSpan.Zero;
             }
         }
+    }
+
+    /// <summary>Drains what the listener sends: its keep-alives, which also keep its side of Bluetooth awake.</summary>
+    void Listen()
+    {
+        try
+        {
+            while (AuraProtocol.ReadListenerMessage(input))
+                Interlocked.Exchange(ref lastHeard, Environment.TickCount64);
+        }
+        catch (Exception)
+        {
+            // Closed under this thread, or the link broke: either way it is over.
+        }
+        close(); // the listener hung up: free the sending side too
+    }
+
+    bool WentSilent()
+    {
+        long heard = Interlocked.Read(ref lastHeard);
+        return heard != 0 && Environment.TickCount64 - heard > SilentListenerMs;
     }
 
     public void Dispose()

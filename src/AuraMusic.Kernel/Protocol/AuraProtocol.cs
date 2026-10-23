@@ -5,7 +5,8 @@ namespace AuraMusic.Kernel.Protocol;
 /// the master sends a header ("AURA", version, session id), the listener answers with a <see cref="Hello"/>,
 /// then come length-prefixed, numbered Opus packets of 20 ms each, and empty keep-alive frames when there is
 /// no sound. The session id and the sequence numbers let a listener connected over both links keep the first
-/// copy of every packet and drop the other.
+/// copy of every packet and drop the other. Upstream, after its hello, the listener only sends a one-byte
+/// <see cref="WriteListenerAlive"/> every second.
 /// </summary>
 public static class AuraProtocol
 {
@@ -20,10 +21,18 @@ public static class AuraProtocol
     public const int Bitrate = 96_000;
     /// <summary>Used while every listener is served by healthy Wi-Fi, where airtime is not a concern.</summary>
     public const int WifiBitrate = 160_000;
+    /// <summary>
+    /// What the streams of all the Bluetooth listeners may add up to: the master's single radio takes turns
+    /// between them, so each one beyond the second gets a smaller share instead of everybody falling behind.
+    /// </summary>
+    public const int BluetoothBudget = 2 * Bitrate;
+    /// <summary>Opus stereo music is still good here; below, it would be heard.</summary>
+    public const int MinBluetoothBitrate = 48_000;
     public const int MaxPacketSize = 1275;
     public const int MaxNameBytes = 64;
 
     const byte Version = 3;
+    const byte ListenerAlive = 1;
     const int HeaderSize = 4 + 1 + 4;
     const int FramePrefixSize = 2 + 4;
     static ReadOnlySpan<byte> Magic => "AURA"u8;
@@ -79,6 +88,26 @@ public static class AuraProtocol
     /// a quiet link from a dead one. <see cref="ReadFrame"/> returns 0 for it.
     /// </summary>
     public static void WriteKeepAlive(Stream stream) => WriteFrame(stream, 0, []);
+
+    /// <summary>The encoder's bitrate while <paramref name="carriers"/> Bluetooth links carry the stream.</summary>
+    public static int BluetoothBitrate(int carriers) =>
+        carriers <= BluetoothBudget / Bitrate ? Bitrate : Math.Max(MinBluetoothBitrate, BluetoothBudget / carriers / 8_000 * 8_000);
+
+    /// <summary>
+    /// Sent by the listener every second on each link. Android only keeps a Bluetooth link fully awake while
+    /// the phone itself writes to it: a listener that just read had its side of the link put into sniff mode
+    /// after a few seconds, and the sound then only got through at the sniff intervals, in bursts up to half a
+    /// second apart. Also tells the master the listener is still there. Masters before this byte never read it,
+    /// and a few bytes a second take hours to fill their buffer.
+    /// </summary>
+    public static void WriteListenerAlive(Stream stream)
+    {
+        stream.WriteByte(ListenerAlive);
+        stream.Flush();
+    }
+
+    /// <returns><see langword="false"/> once the listener has closed the link.</returns>
+    public static bool ReadListenerMessage(Stream stream) => stream.ReadByte() >= 0;
 
     /// <summary>Sent by a listener on every link right after the header, so the master knows which phone it is.</summary>
     public static void WriteHello(Stream stream, Hello hello)

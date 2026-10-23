@@ -114,6 +114,32 @@ public sealed class AuraProtocolTests
         sequence.ShouldBe(9u);
     }
 
+    [Fact]
+    public void ListenerAlive_IsOneByte_UntilTheListenerHangsUp()
+    {
+        using var stream = new MemoryStream();
+        AuraProtocol.WriteListenerAlive(stream);
+        AuraProtocol.WriteListenerAlive(stream);
+        stream.Position = 0;
+
+        stream.Length.ShouldBe(2);
+        AuraProtocol.ReadListenerMessage(stream).ShouldBeTrue();
+        AuraProtocol.ReadListenerMessage(stream).ShouldBeTrue();
+        AuraProtocol.ReadListenerMessage(stream).ShouldBeFalse();
+    }
+
+    [Theory]
+    [InlineData(0, 96_000)]
+    [InlineData(1, 96_000)]
+    [InlineData(2, 96_000)]
+    [InlineData(3, 64_000)]
+    [InlineData(4, 48_000)]
+    [InlineData(7, 48_000)] // the most Bluetooth Classic connects at once: never below the floor
+    public void BluetoothBitrate_SharesTheRadioBeyondTwoListeners(int carriers, int bitrate)
+    {
+        AuraProtocol.BluetoothBitrate(carriers).ShouldBe(bitrate);
+    }
+
     [Theory]
     [InlineData("Nord 2")]
     [InlineData("Téléphone de Léa 🎧")]
