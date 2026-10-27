@@ -82,9 +82,11 @@ public sealed class ListenerStats(TimeProvider timeProvider) : IPlayoutMetrics
     /// </summary>
     public ListenerReport TakeReport()
     {
-        long now = timeProvider.GetTimestamp();
         lock (counters)
         {
+            // Read under the lock: two overlapping calls would otherwise close their windows in the opposite order
+            // to their timestamps, and the late one would move the window's start back.
+            long now = timeProvider.GetTimestamp();
             double elapsedMs = Math.Max(1, timeProvider.GetElapsedTime(windowStart, now).TotalMilliseconds);
             // 50 frames/s on a link means it keeps up with real time on its own.
             var report = new ListenerReport(NativeCodec, Links, bluetooth * 1000.0 / elapsedMs, wifi * 1000.0 / elapsedMs,

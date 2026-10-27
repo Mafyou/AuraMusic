@@ -586,6 +586,10 @@ public sealed class ListenService : Service
         }
         finally
         {
+            // Completing the channel does not hand its packets to the drop callback: back to the pool with them.
+            // OnDestroy completes it before stopping this thread, so no link can add one after this.
+            while (packets.TryRead(out var left))
+                left.Return();
             track.Stop();
             track.Release();
         }
@@ -643,9 +647,11 @@ public sealed class ListenService : Service
 
     public override void OnDestroy()
     {
+        // Completed before cancelling: once the playback thread drains the channel, the links' writes are refused
+        // and they return their packets themselves.
+        packets.Writer.TryComplete();
         cts?.Cancel();
         reportTimer?.Dispose();
-        packets.Writer.TryComplete();
         if (focusRequest is not null)
             ((AudioManager)GetSystemService(AudioService)!).AbandonAudioFocusRequest(focusRequest);
         if (noisyReceiver is not null)

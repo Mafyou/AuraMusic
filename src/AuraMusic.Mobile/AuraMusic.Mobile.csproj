@@ -28,7 +28,7 @@
 			publishes exactly that number. The version code Android and the Play Store compare follows from it
 			(1.7.8 gives 10708), so it grows with every release, wherever the build is made.
 		-->
-		<ApplicationDisplayVersion>1.7.17</ApplicationDisplayVersion>
+		<ApplicationDisplayVersion>1.7.18</ApplicationDisplayVersion>
 		<VersionMajor>$([System.Version]::Parse('$(ApplicationDisplayVersion)').Major)</VersionMajor>
 		<VersionMinor>$([System.Version]::Parse('$(ApplicationDisplayVersion)').Minor)</VersionMinor>
 		<VersionPatch>$([System.Version]::Parse('$(ApplicationDisplayVersion)').Build)</VersionPatch>
