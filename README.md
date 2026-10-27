@@ -55,11 +55,11 @@ Hors de la maison, sans Wi-Fi commun : l'un active son partage de connexion et l
 - `src/AuraMusic.Kernel` : la logique sans dépendance Android, testable.
   - `State/` : l'état de l'app, une union `AuraState` publiée par `AuraHub` ;
   - `Protocol/` : le format des données échangées ;
-  - `Playout/` : `PlayoutController`, qui décide toutes les 20 ms de jouer, rattraper, combler, sauter ou rebufferiser (une union `PlayoutStep`), `PcmCrossfade`, `DriftController` (dérive d'horloge), `AdaptiveLatency` (délai appris des blocages) et `PlayoutTuning` (délai choisi au curseur) ;
-  - `Diagnostics/` : les relevés du master et de l'écoute (une union `DiagnosticsReport`) et leur mise en texte ;
+  - `Playout/` : `PlayoutController`, qui décide toutes les 20 ms de jouer, rattraper, combler, sauter ou rebufferiser (une union `PlayoutStep`), `PcmCrossfade`, `DriftController` (dérive d'horloge), `AdaptiveLatency` (délai appris des blocages), `PlayoutTuning` (délai choisi au curseur) et `LatencyTarget` (ce qui en découle pour le tampon et la dérive) ;
+  - `Diagnostics/` : les relevés du master et de l'écoute (une union `DiagnosticsReport`), les compteurs de l'écoute (`ListenerStats`) et leur mise en texte ;
   - `Spectrum/` : l'analyseur de spectre ;
   - `Updates/` : lecture de la dernière release GitHub et comparaison des versions (une union `UpdateCheck`) ;
-  - `Codec/` : encodeur et décodeur Opus (`OpusCodec`, natif ou C#) ;
+  - `Codec/` : encodeur et décodeur Opus (`OpusCodec`, natif ou C#), et `OpusPacket`, un paquet dans un tampon loué à `ArrayPool` plutôt qu'alloué à chaque paquet ;
   - `Localization/` : choix de la langue (FR par défaut, EN) ;
   - `Navigation/` : `DoubleBackToExit`, le double appui sur Retour avant de quitter l'app (le premier affiche un toast, le second dans les deux secondes quitte) ;
   - `Multipath/` : fusion des liens Bluetooth et Wi-Fi (`SequenceGate`), répartition côté master (`LinkRouter`), balise réseau (`LanBeacon`) et téléphones de confiance (`TrustedDevices`).

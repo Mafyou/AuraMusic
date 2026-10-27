@@ -34,7 +34,9 @@ public static class AuraProtocol
     const byte Version = 3;
     const byte ListenerAlive = 1;
     const int HeaderSize = 4 + 1 + 4;
-    const int FramePrefixSize = 2 + 4;
+
+    /// <summary>What each frame adds in front of its packet on the wire: its length and its sequence number.</summary>
+    public const int FramePrefixSize = 2 + 4;
     static ReadOnlySpan<byte> Magic => "AURA"u8;
 
     public static void WriteHeader(Stream stream, uint session)

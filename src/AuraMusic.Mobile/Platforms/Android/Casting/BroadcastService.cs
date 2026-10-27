@@ -11,7 +11,10 @@ public sealed class BroadcastService : Service
     public const string ExtraResultCode = "resultCode";
     public const string ExtraResultData = "resultData";
 
-    readonly List<ListenerLink> listeners = [];
+    // Replaced as a whole under the lock, read without it: the capture and encode loops look at it 50 times a second
+    // and must neither wait for a link being added nor copy the list each time.
+    readonly Lock listenersLock = new();
+    ImmutableArray<ListenerLink> listeners = [];
     CancellationTokenSource? cts;
     MediaProjection? projection;
     AudioRecord? recorder;
@@ -152,8 +155,8 @@ public sealed class BroadcastService : Service
                 return;
             }
 
-            lock (listeners)
-                listeners.Add(link);
+            lock (listenersLock)
+                listeners = listeners.Add(link);
             PublishListeners();
             link.Run(stoppingToken);
         }
@@ -165,8 +168,8 @@ public sealed class BroadcastService : Service
         }
         finally
         {
-            lock (listeners)
-                listeners.Remove(link);
+            lock (listenersLock)
+                listeners = listeners.Remove(link);
             link.Dispose();
             if (!stoppingToken.IsCancellationRequested)
                 PublishListeners();
@@ -222,9 +225,7 @@ public sealed class BroadcastService : Service
 
     void PublishListeners()
     {
-        ImmutableArray<string> names;
-        lock (listeners)
-            names = [.. listeners.GroupBy(link => link.Id).Select(phone => phone.First().Name)]; // a phone may be on both links
+        ImmutableArray<string> names = [.. listeners.GroupBy(link => link.Id).Select(phone => phone.First().Name)]; // a phone may be on both links
         AuraHub.Publish(names.IsEmpty ? new Advertising() : new Streaming(names));
     }
 
@@ -261,9 +262,7 @@ public sealed class BroadcastService : Service
                 SpectrumHub.Publish(levels);
             }
 
-            bool anyListener;
-            lock (listeners)
-                anyListener = listeners.Count > 0;
+            bool anyListener = !listeners.IsEmpty;
             if (!anyListener || !toEncode.Writer.TryWrite(pcm))
                 FramePool.Return(pcm);
             // Nothing is encoded while nobody listens: once a second, clear the links the last report still shows.
@@ -286,7 +285,6 @@ public sealed class BroadcastService : Service
         var packet = new byte[AuraProtocol.MaxPacketSize];
         uint sequence = 0;
         int bitrate = AuraProtocol.Bitrate;
-        ListenerLink[] targets = [];
         var statuses = new LinkStatus[4];
         var carries = new bool[4];
         long windowStart = Environment.TickCount64, reportStart = windowStart;
@@ -295,8 +293,7 @@ public sealed class BroadcastService : Service
         int frames = 0;
         await foreach (var pcm in toEncode.Reader.ReadAllAsync(stoppingToken))
         {
-            lock (listeners)
-                targets = [.. listeners];
+            var targets = listeners;
             if (statuses.Length < targets.Length)
                 (statuses, carries) = (new LinkStatus[targets.Length], new bool[targets.Length]);
             for (int i = 0; i < targets.Length; i++)
@@ -315,10 +312,10 @@ public sealed class BroadcastService : Service
             encoding += lastEncode;
             FramePool.Return(pcm);
 
-            var frame = new EncodedFrame(sequence++, packet.AsSpan(0, length).ToArray());
+            uint frameSequence = sequence++;
             for (int i = 0; i < targets.Length; i++)
                 if (carries[i]) // a Bluetooth link idles behind its phone's healthy Wi-Fi link
-                    targets[i].Enqueue(frame);
+                    targets[i].Enqueue(frameSequence, packet.AsSpan(0, length));
 
             // Once a second, for the diagnostics screen.
             long sinceReport = Environment.TickCount64 - reportStart;
@@ -349,12 +346,11 @@ public sealed class BroadcastService : Service
         server?.Close();
         lan?.Dispose();
 
-        lock (listeners)
-        {
-            foreach (var link in listeners)
-                link.Dispose();
-            listeners.Clear();
-        }
+        ImmutableArray<ListenerLink> links;
+        lock (listenersLock)
+            (links, listeners) = (listeners, []);
+        foreach (var link in links)
+            link.Dispose();
 
         try { recorder?.Stop(); } catch (Java.Lang.IllegalStateException) { }
         captureThread?.Join(TimeSpan.FromSeconds(1));

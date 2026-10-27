@@ -67,7 +67,7 @@ public sealed class GitHubReleaseFeedTests
     {
         public HttpRequestMessage? Request { get; private set; }
 
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken stoppingToken)
         {
             Request = request;
             return Task.FromResult(new HttpResponseMessage(status) { Content = new StringContent(body, Encoding.UTF8, "application/json") });

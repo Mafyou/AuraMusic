@@ -74,9 +74,9 @@ public sealed class PlayoutController(IPlayoutMetrics metrics)
 
     /// <param name="packet">The next packet, or <see langword="null"/> when it did not arrive in time.</param>
     /// <param name="backlog">Packets still waiting in the jitter buffer after this one.</param>
-    public PlayoutStep Next(byte[]? packet, int backlog)
+    public PlayoutStep Next(OpusPacket? next, int backlog)
     {
-        if (packet is null)
+        if (next is not { } packet)
         {
             if (++concealedInARow > MaxConcealedFrames)
             {

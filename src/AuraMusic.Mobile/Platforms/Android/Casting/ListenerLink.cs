@@ -1,7 +1,7 @@
 namespace AuraMusic.Mobile.Casting;
 
-/// <summary>An encoded 20 ms packet and its place in the stream.</summary>
-readonly record struct EncodedFrame(uint Sequence, byte[] Packet);
+/// <summary>An encoded 20 ms packet, in a buffer the link rented, and its place in the stream.</summary>
+readonly record struct EncodedFrame(uint Sequence, OpusPacket Packet);
 
 /// <summary>
 /// One connected listener, over Bluetooth or Wi-Fi, with its own small queue and its own threads so a slow link
@@ -25,9 +25,10 @@ sealed class ListenerLink(Stream input, Stream output, Links kind, Action close)
     const int BluetoothGatherMs = (BluetoothFramesPerWrite - 1) * PlayoutTuning.FrameMs;
 
     // A second of audio, to lose nothing over a radio stall (the listener gets back in step by itself);
-    // beyond that the oldest frames are dropped rather than drift behind.
+    // beyond that the oldest frames are dropped rather than drift behind, their buffers going back to the pool.
     readonly Channel<EncodedFrame> queue = Channel.CreateBounded<EncodedFrame>(
-        new BoundedChannelOptions(QueueCapacity) { FullMode = BoundedChannelFullMode.DropOldest, SingleReader = true, SingleWriter = true });
+        new BoundedChannelOptions(QueueCapacity) { FullMode = BoundedChannelFullMode.DropOldest, SingleReader = true, SingleWriter = true },
+        static dropped => dropped.Packet.Return());
     Hello? hello;
     long readyAt;
     int dropped;
@@ -67,11 +68,17 @@ sealed class ListenerLink(Stream input, Stream output, Links kind, Action close)
         return new LinkReport(Name, kind, sent / seconds, queue.Reader.Count, carrying);
     }
 
-    public void Enqueue(EncodedFrame frame)
+    /// <summary>
+    /// Queues a copy of <paramref name="packet"/> in a rented buffer: each link owns its copies, so whichever of them
+    /// sends, drops or closes first never pulls a buffer from under another.
+    /// </summary>
+    public void Enqueue(uint sequence, ReadOnlySpan<byte> packet)
     {
         if (queue.Reader.Count == QueueCapacity)
             Interlocked.Increment(ref dropped);
-        queue.Writer.TryWrite(frame);
+        var frame = new EncodedFrame(sequence, OpusPacket.Rent(packet));
+        if (!queue.Writer.TryWrite(frame))
+            frame.Packet.Return(); // closed
     }
 
     /// <summary>Sends the stream until the link drops. Blocking: runs on the link's own thread.</summary>
@@ -97,19 +104,24 @@ sealed class ListenerLink(Stream input, Stream output, Links kind, Action close)
         int sent = 0, writes = 0;
         var writing = TimeSpan.Zero;
         Task<bool>? waiting = null;
+        var waitSet = new Task[1]; // reused: WaitAny would otherwise take a fresh array for every write
         while (!WentSilent())
         {
-            // No sound to send (music paused, or this link idles behind a healthy Wi-Fi one): a keep-alive every
-            // second tells the listener the link is quiet, not dead, and lets a dead one fail on write.
-            waiting ??= queue.Reader.WaitToReadAsync(stoppingToken).AsTask();
-            if (Task.WaitAny([waiting], KeepAliveInterval) < 0)
+            // Frames already queued go straight out; only an empty queue is waited on.
+            if (waiting is not null || stoppingToken.IsCancellationRequested || !queue.Reader.TryPeek(out _))
             {
-                AuraProtocol.WriteKeepAlive(output);
-                continue;
+                // No sound to send (music paused, or this link idles behind a healthy Wi-Fi one): a keep-alive every
+                // second tells the listener the link is quiet, not dead, and lets a dead one fail on write.
+                waitSet[0] = waiting ??= queue.Reader.WaitToReadAsync(stoppingToken).AsTask();
+                if (Task.WaitAny(waitSet, KeepAliveInterval) < 0)
+                {
+                    AuraProtocol.WriteKeepAlive(output);
+                    continue;
+                }
+                if (!waiting.IsCompletedSuccessfully || !waiting.Result)
+                    return; // stopping, or this link was closed
+                waiting = null;
             }
-            if (!waiting.IsCompletedSuccessfully || !waiting.Result)
-                return; // stopping, or this link was closed
-            waiting = null;
 
             if (kind == Links.Bluetooth && queue.Reader.Count < BluetoothFramesPerWrite)
                 Thread.Sleep(BluetoothGatherMs);
@@ -117,7 +129,8 @@ sealed class ListenerLink(Stream input, Stream output, Links kind, Action close)
             batch.SetLength(0);
             for (int count = 0; count < MaxFramesPerWrite && queue.Reader.TryRead(out var frame); count++)
             {
-                AuraProtocol.WriteFrame(batch, frame.Sequence, frame.Packet);
+                AuraProtocol.WriteFrame(batch, frame.Sequence, frame.Packet.Span);
+                frame.Packet.Return(); // copied into the batch
                 sent++;
                 Interlocked.Increment(ref sentTotal);
             }
