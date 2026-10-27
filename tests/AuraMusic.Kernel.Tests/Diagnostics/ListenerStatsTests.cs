@@ -88,6 +88,35 @@ public sealed class ListenerStatsTests
     }
 
     [Fact]
+    public void TakeReport_OverlappingCalls_NeverMoveTheWindowBack()
+    {
+        // The timer fires again while a report is still being taken: the late call must not reopen the window the
+        // other one already closed, or the next figures are spread over too long a time.
+        Wait(1_000);
+        Thread? other = null;
+        clock.Setup(c => c.GetTimestamp()).Returns(() =>
+        {
+            long read = now;
+            if (other is null)
+            {
+                Wait(500);
+                other = new Thread(() => sut.TakeReport());
+                other.Start();
+                // Read under the lock, the other call can only wait for this one: give it the time to overtake if it can.
+                other.Join(TimeSpan.FromMilliseconds(200));
+            }
+            return read;
+        });
+        sut.TakeReport();
+        other!.Join();
+        for (int i = 0; i < 50; i++)
+            sut.Received(Links.Bluetooth, 240);
+        Wait(1_000);
+
+        sut.TakeReport().BluetoothFramesPerSecond.ShouldBe(50, tolerance: 1e-9);
+    }
+
+    [Fact]
     public void TakeReport_RightAfterTheStart_DoesNotDivideByZero()
     {
         sut.Received(Links.Bluetooth, 100);

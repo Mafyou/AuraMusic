@@ -84,6 +84,22 @@ sealed class ListenerLink(Stream input, Stream output, Links kind, Action close)
     /// <summary>Sends the stream until the link drops. Blocking: runs on the link's own thread.</summary>
     public void Run(CancellationToken stoppingToken)
     {
+        try
+        {
+            Send(stoppingToken);
+        }
+        finally
+        {
+            // Completing the queue does not hand its frames to the drop callback: they go back to the pool here, on
+            // the only thread that reads it, once the encoder can no longer add any (Enqueue returns what it is refused).
+            queue.Writer.TryComplete();
+            while (queue.Reader.TryRead(out var frame))
+                frame.Packet.Return();
+        }
+    }
+
+    void Send(CancellationToken stoppingToken)
+    {
         // The hello is in: from now on silence is judged on the listener's keep-alives, not on a read timeout.
         if (input.CanTimeout)
             input.ReadTimeout = Timeout.Infinite;
