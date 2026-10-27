@@ -19,7 +19,7 @@ public sealed class PlayoutControllerTests
         var step = CreateController().Next(packet, backlog: 2);
 
         var play = step is Play p ? p : null;
-        play.ShouldNotBeNull().Packet.ShouldBeSameAs(packet);
+        play.ShouldNotBeNull().Packet.Buffer.ShouldBeSameAs(packet);
         metrics.VerifyNoOtherCalls();
     }
 
@@ -80,7 +80,7 @@ public sealed class PlayoutControllerTests
         var step = CreateController().Next(packet, backlog);
 
         var skip = step is Skip s ? s : null;
-        skip.ShouldNotBeNull().Packet.ShouldBeSameAs(packet);
+        skip.ShouldNotBeNull().Packet.Buffer.ShouldBeSameAs(packet);
         metrics.Verify(m => m.Skipped(), Times.Once);
     }
 
@@ -90,7 +90,7 @@ public sealed class PlayoutControllerTests
         var step = CreateController().Next(packet, backlog: 8);
 
         var catchUp = step is CatchUp c ? c : null;
-        catchUp.ShouldNotBeNull().Packet.ShouldBeSameAs(packet);
+        catchUp.ShouldNotBeNull().Packet.Buffer.ShouldBeSameAs(packet);
         metrics.Verify(m => m.CaughtUp(), Times.Once);
         metrics.Verify(m => m.Skipped(), Times.Never);
     }

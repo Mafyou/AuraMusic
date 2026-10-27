@@ -83,11 +83,12 @@ public sealed class SpectrumAnalyzer
         for (int band = 0; band < bandBins.Length && band < levels.Length; band++)
         {
             var (first, last) = bandBins[band];
-            float peak = 0;
+            // Squared magnitudes compare the same way: one square root per band rather than one per bin.
+            float peakSquared = 0;
             for (int bin = first; bin <= last; bin++)
-                peak = MathF.Max(peak, MathF.Sqrt(real[bin] * real[bin] + imaginary[bin] * imaginary[bin]));
+                peakSquared = MathF.Max(peakSquared, real[bin] * real[bin] + imaginary[bin] * imaginary[bin]);
             // A full-scale sine reads 1 (0 dB); the display covers 60 dB below that.
-            float amplitude = 2 * peak / windowGain;
+            float amplitude = 2 * MathF.Sqrt(peakSquared) / windowGain;
             float decibels = 20 * MathF.Log10(amplitude + 1e-9f);
             levels[band] = Math.Clamp((decibels - FloorDecibels) / -FloorDecibels, 0, 1);
         }

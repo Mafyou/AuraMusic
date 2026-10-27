@@ -19,13 +19,17 @@ sealed class BurstyLinkSimulation : IPlayoutMetrics
     const double SettleStepMs = 60;
     const int SettleSteps = 15;
 
+    // What the link carries does not matter to the playout: one packet stands for all of them.
+    static readonly byte[] Packet = [0];
+
     readonly PlayoutController playout;
     readonly DriftController drift = new(48_000);
     readonly AdaptiveLatency adaptive = new();
+    readonly LatencyTarget target;
     readonly int chosenLatencyMs;
     readonly Func<int> nextBurst;
     readonly List<double> arrivals = []; // arrivals[k]: when the k-th packet that gets through reaches the listener
-    int produced, consumed, latencyMs;
+    int produced, consumed;
     double now, dryAt = -1;
 
     public BurstyLinkSimulation(int latencyMs, Func<int> nextBurst)
@@ -33,6 +37,7 @@ sealed class BurstyLinkSimulation : IPlayoutMetrics
         this.nextBurst = nextBurst;
         chosenLatencyMs = latencyMs;
         playout = new PlayoutController(this);
+        target = new LatencyTarget(playout, drift);
         Retarget();
     }
 
@@ -52,7 +57,7 @@ sealed class BurstyLinkSimulation : IPlayoutMetrics
 
     public double Correction => drift.Correction;
 
-    public int LatencyMs => latencyMs;
+    public int LatencyMs => target.LatencyMs;
 
     /// <summary>The listener's clock runs this much faster than the master's.</summary>
     public double ClockErrorPpm { get; init; }
@@ -65,15 +70,7 @@ sealed class BurstyLinkSimulation : IPlayoutMetrics
 
     public void Rebuffered() => RebufferCount++;
 
-    void Retarget()
-    {
-        int wanted = chosenLatencyMs + adaptive.ExtraMs;
-        if (wanted == latencyMs)
-            return;
-        latencyMs = wanted;
-        playout.SetCushion(PlayoutTuning.CushionFrames(latencyMs));
-        drift.TargetMs = PlayoutTuning.ReachableLatencyMs(latencyMs);
-    }
+    void Retarget() => target.Retarget(chosenLatencyMs + adaptive.ExtraMs);
 
     /// <summary>A packet is produced every 20 ms; the link hands them over a whole burst at a time.</summary>
     void DeliverUntil(int packet)
@@ -145,7 +142,7 @@ sealed class BurstyLinkSimulation : IPlayoutMetrics
             }
 
             consumed++;
-            switch (playout.Next([0], available - 1))
+            switch (playout.Next(Packet, available - 1))
             {
                 case Skip:
                     continue;

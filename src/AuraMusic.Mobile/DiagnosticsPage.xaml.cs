@@ -5,6 +5,9 @@ namespace AuraMusic.Mobile
     {
         const int LabelWidth = 22;
 
+        // The same for as long as the page is open: asked of Android once, not at every refresh.
+        readonly string phone = $"{DeviceName.Of(Platform.AppContext)} · {DeviceName.Id.ToString("N")[..8]}";
+
         public DiagnosticsPage()
         {
             InitializeComponent();
@@ -36,7 +39,7 @@ namespace AuraMusic.Mobile
             void Line(string label, string value) => text.Append(label.PadRight(LabelWidth)).AppendLine(value);
 
             Line("app", $"AuraMusic {AppInfo.Current.VersionString} ({LanguageSettings.Current})");
-            Line("phone", $"{DeviceName.Of(Platform.AppContext)} · {DeviceName.Id.ToString("N")[..8]}");
+            Line("phone", phone);
             Line("state", DescribeState(AuraHub.Current));
             Line("sync target", $"{PlayoutTuning.TargetLatencyMs} ms");
             text.AppendLine();

@@ -110,7 +110,7 @@
                 Streaming(var names) => (names.Length == 1 ? AppStrings.StatusStreamingOne : Format(AppStrings.StatusStreamingMany, names.Length),
                     Format(AppStrings.HintStreamingWith, string.Join(", ", names))),
                 Searching(var problem) => (AppStrings.StatusSearching, problem ?? AppStrings.HintSearching),
-                Listening(var master, var links) => (Format(AppStrings.StatusListening, master), Format(AppStrings.HintListeningVia, Describe(links))),
+                Listening(var master, var links) => (Format(AppStrings.StatusListening, master), Format(AppStrings.HintListeningVia, DiagnosticsText.Describe(links))),
                 Failed(var reason) => (AppStrings.StatusFailed, reason),
             };
 
@@ -148,13 +148,6 @@
         void OnStopClicked(object? sender, EventArgs e) => AuraController.Stop();
 
         static string Format(string format, object value) => string.Format(CultureInfo.CurrentCulture, format, value);
-
-        static string Describe(Links links) => links switch
-        {
-            Links.Wifi | Links.Bluetooth => "Wi-Fi + Bluetooth",
-            Links.Wifi => "Wi-Fi",
-            _ => "Bluetooth",
-        };
 
         async void OnPullToUpdate(object? sender, EventArgs e)
         {

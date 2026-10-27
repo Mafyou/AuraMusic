@@ -42,8 +42,9 @@ public sealed class ListenService : Service
     const int SettleStepMs = 60;
     const int SettleLimitMs = 900;
 
-    // A latency raised by this much at once (Wi-Fi lost, the slider pushed up) is reached by pausing to refill.
-    const int RefillAboveMs = 100;
+    // While waiting for packets, how often the playback thread looks whether it should stop: a packet arriving
+    // wakes it at once.
+    static readonly TimeSpan IdleCheck = TimeSpan.FromMilliseconds(100);
 
     // Spectrum levels waiting for their audio to be played; bounded in case the AudioTrack stalls.
     const int MaxPendingLevels = 50;
@@ -51,11 +52,19 @@ public sealed class ListenService : Service
     CancellationTokenSource? cts;
     readonly OutputGain gain = new();
     readonly SequenceGate gate = new();
-    readonly ReceiveStats stats = new();
+    // Published every second for the diagnostics screen, logged every five (adb logcat -s AuraMusic).
+    readonly ListenerStats stats = new(TimeProvider.System);
     static readonly TimeSpan ReportInterval = TimeSpan.FromSeconds(1);
+    const int LogEveryReports = 5;
+    int reports;
     Timer? reportTimer;
-    readonly Channel<byte[]> packets = Channel.CreateBounded<byte[]>(
-        new BoundedChannelOptions(MaxBufferedFrames) { FullMode = BoundedChannelFullMode.DropOldest, SingleReader = true });
+    // Packets are rented, not allocated: 50 fresh arrays a second per link kept the GC busy, and on Android a .NET
+    // collection also stops the Java side, audio threads included. A packet dropped by the full channel goes back.
+    readonly Channel<OpusPacket> packets = Channel.CreateBounded<OpusPacket>(
+        new BoundedChannelOptions(MaxBufferedFrames) { FullMode = BoundedChannelFullMode.DropOldest, SingleReader = true },
+        static dropped => dropped.Return());
+    // Set by the links each time they add a packet, so the playback thread waits for one instead of polling.
+    readonly ManualResetEventSlim arrived = new();
     readonly Lock linksLock = new();
     int bluetoothLinks, wifiLinks;
     string master = "AuraMusic";
@@ -81,11 +90,28 @@ public sealed class ListenService : Service
 
         cts = new CancellationTokenSource();
         var stoppingToken = cts.Token;
-        new Thread(() => Play(packets.Reader, stats, gain, stoppingToken)) { IsBackground = true, Name = "AuraMusic playback" }.Start();
-        reportTimer = new Timer(_ => stats.Publish(), null, ReportInterval, ReportInterval);
-        _ = Task.Run(() => BluetoothLoopAsync(stoppingToken));
+        new Thread(() => Play(packets.Reader, arrived, stats, gain, stoppingToken)) { IsBackground = true, Name = "AuraMusic playback" }.Start();
+        reportTimer = new Timer(_ => PublishStats(), null, ReportInterval, ReportInterval);
+        // Its own thread, not the pool's: connecting and reading block for as long as the link lasts.
+        new Thread(() => BluetoothLoop(stoppingToken)) { IsBackground = true, Name = "AuraMusic from Bluetooth" }.Start();
         _ = Task.Run(() => WifiLoopAsync(stoppingToken));
         return StartCommandResult.NotSticky;
+    }
+
+    /// <summary>
+    /// Once a second, on a timer rather than on reception: when nothing arrives (music paused, link lost) the screen
+    /// must show 0 frames/s, not the last good figures.
+    /// </summary>
+    void PublishStats()
+    {
+        var report = stats.TakeReport();
+        DiagnosticsHub.Publish(report);
+        if (Interlocked.Increment(ref reports) % LogEveryReports != 0)
+            return;
+        Log.Info(AuraLog.Tag, $"rx bluetooth {report.BluetoothFramesPerSecond:F0} + wifi {report.WifiFramesPerSecond:F0} frames/s, "
+            + $"{report.Kbps} kbps, buffer {report.BufferedMs}/{report.TargetMs} ms, drift {report.DriftPpm:+0;-0} ppm, caught up {report.CaughtUp}, "
+            + $"concealed {report.Concealed}, skipped {report.Skipped}, rebuffers {report.Rebuffers}, dropped {report.Dropped}, "
+            + $"underruns {stats.Underruns}, longest gap {stats.TakeLongestGap().TotalMilliseconds:F0} ms, gc {GC.CollectionCount(0)}/{GC.CollectionCount(1)}/{GC.CollectionCount(2)}");
     }
 
     /// <summary>Calls, navigation prompts or another music app lower or silence us instead of playing on top.</summary>
@@ -113,7 +139,7 @@ public sealed class ListenService : Service
             RegisterReceiver(noisyReceiver, filter);
     }
 
-    async Task BluetoothLoopAsync(CancellationToken stoppingToken)
+    void BluetoothLoop(CancellationToken stoppingToken)
     {
         var adapter = ((BluetoothManager)GetSystemService(BluetoothService)!).Adapter;
         while (!stoppingToken.IsCancellationRequested)
@@ -149,9 +175,16 @@ public sealed class ListenService : Service
                 // Bluetooth off or nothing paired: not fatal, the Wi-Fi link may still find the master.
                 ReportProblem(ex.Message);
             }
+            catch (Exception ex)
+            {
+                // Anything else ends the Bluetooth side, as it did when this loop ran as a task; on a thread of its
+                // own, letting it through would take the whole app down. Wi-Fi carries on.
+                Log.Error(AuraLog.Tag, $"Bluetooth link gave up: {ex}");
+                return;
+            }
 
             // Master not broadcasting yet, stopped, or out of range: look for it again.
-            await Task.Delay(retry, stoppingToken).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
+            stoppingToken.WaitHandle.WaitOne(retry);
         }
     }
 
@@ -250,7 +283,9 @@ public sealed class ListenService : Service
         }
         using var closeOnStop = stoppingToken.Register(client.Dispose);
         var stream = client.GetStream();
-        bool joined = await Task.Run(() => ReadLink(stream, stream, Links.Wifi, beacon.Name, client.Dispose, stoppingToken), stoppingToken);
+        // A thread of its own (long running), not one of the pool's: the reads block for as long as the link lasts.
+        bool joined = await Task.Factory.StartNew(() => ReadLink(stream, stream, Links.Wifi, beacon.Name, client.Dispose, stoppingToken),
+            stoppingToken, TaskCreationOptions.LongRunning, TaskScheduler.Default);
         if (!joined)
             await Task.Delay(LongRetryDelay, stoppingToken); // refused (not paired yet) or another broadcast
     }
@@ -314,7 +349,11 @@ public sealed class ListenService : Service
                     continue; // the other link was faster
                 if (packets.Reader.Count == MaxBufferedFrames)
                     stats.Dropped();
-                packets.Writer.TryWrite(buffer.AsSpan(0, length).ToArray());
+                var packet = OpusPacket.Rent(buffer.AsSpan(0, length));
+                if (packets.Writer.TryWrite(packet))
+                    arrived.Set();
+                else
+                    packet.Return(); // stopping
             }
         }
         catch (IOException) when (!up && !stoppingToken.IsCancellationRequested)
@@ -391,7 +430,8 @@ public sealed class ListenService : Service
     /// Decodes on the playback clock, so a packet that is not there in time gets concealed by Opus
     /// instead of cutting the sound. Runs for the whole service: while no link is up it just waits.
     /// </summary>
-    static void Play(ChannelReader<byte[]> packets, ReceiveStats stats, OutputGain gain, CancellationToken stoppingToken)
+    static void Play(ChannelReader<OpusPacket> packets, ManualResetEventSlim arrived, ListenerStats stats, OutputGain gain,
+        CancellationToken stoppingToken)
     {
         // A late wake-up of this thread starves the AudioTrack, which is heard as crackling:
         // run it at Android's audio priority, like any music player (not urgent-audio, which is the mixer's).
@@ -428,12 +468,11 @@ public sealed class ListenService : Service
 
         // Raises the latency when this link turns out to stall for longer than the buffer holds.
         var adaptive = new AdaptiveLatency();
-        int latency = PlayoutTuning.LatencyFor(stats.Links);
-        int reachable = PlayoutTuning.ReachableLatencyMs(latency, outputMs);
         var playout = new PlayoutController(stats);
-        playout.SetCushion(PlayoutTuning.CushionFrames(latency, outputMs));
         // Plays a hair faster or slower so the buffer stays on target despite the two phones' clocks differing.
-        var drift = new DriftController(AuraProtocol.SampleRate) { TargetMs = reachable };
+        var drift = new DriftController(AuraProtocol.SampleRate);
+        var target = new LatencyTarget(playout, drift, outputMs);
+        target.Retarget(PlayoutTuning.LatencyFor(stats.Links));
         int playbackRate = AuraProtocol.SampleRate;
         var analyzer = new SpectrumAnalyzer(SpectrumHub.Bands, AuraProtocol.SampleRate, AuraProtocol.Channels);
         // Levels wait here until their audio actually comes out of the speaker, so the visualizer is in sync.
@@ -442,20 +481,9 @@ public sealed class ListenService : Service
         float volume = 1;
         long dryAt = 0; // when playback ran out of packets, until it has some again
 
-        // True when much more must now be kept in hand than what is there: playing slower would take minutes
-        // to get there, with the sound at the mercy of the first stall.
-        bool Retarget()
-        {
-            int wanted = PlayoutTuning.LatencyFor(stats.Links) + adaptive.ExtraMs;
-            if (wanted == latency)
-                return false;
-            bool farAbove = wanted - latency >= RefillAboveMs;
-            latency = wanted; // the sync slider moved, Wi-Fi came or went, or the link needs more in hand
-            reachable = PlayoutTuning.ReachableLatencyMs(latency, outputMs);
-            playout.SetCushion(PlayoutTuning.CushionFrames(latency, outputMs));
-            drift.TargetMs = reachable;
-            return farAbove;
-        }
+        // The sync slider moved, Wi-Fi came or went, or the link needs more in hand. True when much more must now
+        // be kept in hand than what is there: refill rather than play slower for minutes.
+        bool Retarget() => target.Retarget(PlayoutTuning.LatencyFor(stats.Links) + adaptive.ExtraMs);
 
         // Silent while it lasts: waits for the cushion to be in hand, lets the link finish pouring out what it
         // held back, and drops what exceeds the cushion (decoded, to keep the codec in step) rather than play
@@ -463,10 +491,13 @@ public sealed class ListenService : Service
         void Refill()
         {
             Retarget();
-            Prebuffer(packets, playout.PrebufferFrames, stoppingToken);
+            Prebuffer(packets, arrived, playout.PrebufferFrames, stoppingToken);
             Settle(packets, stoppingToken);
             while (packets.Count > playout.PrebufferFrames && packets.TryRead(out var stale))
-                decoder.Decode(stale, pcm, AuraProtocol.FrameSamples);
+            {
+                decoder.Decode(stale.Span, pcm, AuraProtocol.FrameSamples);
+                stale.Return();
+            }
             playout.Resynced();
             drift.Restart();
         }
@@ -475,7 +506,7 @@ public sealed class ListenService : Service
         try
         {
             // Which link carries the sound, and so how much to keep in hand, is only known once one delivers.
-            Prebuffer(packets, 1, stoppingToken);
+            Prebuffer(packets, arrived, 1, stoppingToken);
             Refill();
             while (!packets.Completion.IsCompleted && !stoppingToken.IsCancellationRequested)
             {
@@ -490,34 +521,40 @@ public sealed class ListenService : Service
                 else if (Retarget())
                     Refill();
 
-                if (!packets.TryRead(out var packet))
-                    packet = WaitForLatePacket(packets, track, written, stoppingToken);
+                OpusPacket? packet = packets.TryRead(out var ready) ? ready : WaitForLatePacket(packets, arrived, track, written, stoppingToken);
 
                 int length = pcm.Length;
-                switch (playout.Next(packet, packets.Count))
+                try
                 {
-                    case Play(var data):
-                        decoder.Decode(data, pcm, AuraProtocol.FrameSamples);
-                        adaptive.Played();
-                        break;
-                    case CatchUp(var data):
-                        decoder.Decode(data, pcm, AuraProtocol.FrameSamples);
-                        length = PcmCrossfade.Shorten(pcm, AuraProtocol.Channels, CatchUpFrames, CatchUpFadeFrames);
-                        adaptive.Played();
-                        break;
-                    case Conceal:
-                        decoder.Decode(ReadOnlySpan<byte>.Empty, pcm, AuraProtocol.FrameSamples);
-                        drift.RanDry(); // nothing left to play: certainly not the moment to play faster
-                        if (dryAt == 0)
-                            dryAt = Stopwatch.GetTimestamp();
-                        break;
-                    case Skip(var data):
-                        decoder.Decode(data, pcm, AuraProtocol.FrameSamples);
-                        continue;
-                    case Rebuffer:
-                        stats.Playing(0, reachable, 0, track.UnderrunCount); // ran dry: say so rather than leave the last good figures on screen
-                        Prebuffer(packets, 1, stoppingToken); // silent until the link delivers again
-                        continue;
+                    switch (playout.Next(packet, packets.Count))
+                    {
+                        case Play(var data):
+                            decoder.Decode(data.Span, pcm, AuraProtocol.FrameSamples);
+                            adaptive.Played();
+                            break;
+                        case CatchUp(var data):
+                            decoder.Decode(data.Span, pcm, AuraProtocol.FrameSamples);
+                            length = PcmCrossfade.Shorten(pcm, AuraProtocol.Channels, CatchUpFrames, CatchUpFadeFrames);
+                            adaptive.Played();
+                            break;
+                        case Conceal:
+                            decoder.Decode(ReadOnlySpan<byte>.Empty, pcm, AuraProtocol.FrameSamples);
+                            drift.RanDry(); // nothing left to play: certainly not the moment to play faster
+                            if (dryAt == 0)
+                                dryAt = Stopwatch.GetTimestamp();
+                            break;
+                        case Skip(var data):
+                            decoder.Decode(data.Span, pcm, AuraProtocol.FrameSamples);
+                            continue;
+                        case Rebuffer:
+                            stats.Playing(0, target.ReachableMs, 0, track.UnderrunCount); // ran dry: say so rather than leave the last good figures on screen
+                            Prebuffer(packets, arrived, 1, stoppingToken); // silent until the link delivers again
+                            continue;
+                    }
+                }
+                finally
+                {
+                    packet?.Return(); // decoded: the buffer goes back to the pool
                 }
 
                 if (gain.Value != volume)
@@ -530,7 +567,7 @@ public sealed class ListenService : Service
                 int rate = drift.Update(bufferedMs);
                 if (Math.Abs(rate - playbackRate) >= MinRateStepHz)
                     track.SetPlaybackRate(playbackRate = rate);
-                stats.Playing((int)bufferedMs, reachable, drift.Correction * 1e6, track.UnderrunCount);
+                stats.Playing((int)bufferedMs, target.ReachableMs, drift.Correction * 1e6, track.UnderrunCount);
 
                 // The visualizer only needs 25 updates a second, and none while nothing shows it.
                 if (!SpectrumHub.IsObserved)
@@ -558,16 +595,18 @@ public sealed class ListenService : Service
     /// Waits for a late packet as long as the AudioTrack still has audio to play; returns <see langword="null"/>
     /// (conceal) only when it is about to run dry.
     /// </summary>
-    static byte[]? WaitForLatePacket(ChannelReader<byte[]> packets, AudioTrack track, uint written, CancellationToken stoppingToken)
+    static OpusPacket? WaitForLatePacket(ChannelReader<OpusPacket> packets, ManualResetEventSlim arrived, AudioTrack track, uint written,
+        CancellationToken stoppingToken)
     {
         while (!stoppingToken.IsCancellationRequested && !packets.Completion.IsCompleted)
         {
             uint buffered = written - (uint)track.PlaybackHeadPosition;
             if (buffered < LowWaterFrames)
                 return null;
-            Thread.Sleep(1);
+            arrived.Reset();
             if (packets.TryRead(out var packet))
                 return packet;
+            arrived.Wait(1); // woken by the packet itself, else looks at the output again in 1 ms
         }
         return null;
     }
@@ -576,7 +615,7 @@ public sealed class ListenService : Service
     /// After a stall a link pours out what it held back, faster than real time, for a second or so: waits until
     /// packets are back to arriving at their normal pace, so that the excess can be measured once and for all.
     /// </summary>
-    static void Settle(ChannelReader<byte[]> packets, CancellationToken stoppingToken)
+    static void Settle(ChannelReader<OpusPacket> packets, CancellationToken stoppingToken)
     {
         for (int waited = 0; waited < SettleLimitMs && !stoppingToken.IsCancellationRequested; waited += SettleStepMs)
         {
@@ -587,99 +626,18 @@ public sealed class ListenService : Service
         }
     }
 
-    static void Prebuffer(ChannelReader<byte[]> packets, int frames, CancellationToken stoppingToken)
-    {
-        while (packets.Count < frames && !packets.Completion.IsCompleted && !stoppingToken.IsCancellationRequested)
-            Thread.Sleep(5);
-    }
-
     /// <summary>
-    /// Per-link reception and playout events: published every second for the diagnostics screen, logged every
-    /// five (<c>adb logcat -s AuraMusic</c>).
+    /// Waits until <paramref name="frames"/> packets are in hand. Woken by each packet that arrives rather than
+    /// polling every few milliseconds: the playback thread waits like this the whole time the listener searches.
     /// </summary>
-    sealed class ReceiveStats : IPlayoutMetrics
+    static void Prebuffer(ChannelReader<OpusPacket> packets, ManualResetEventSlim arrived, int frames, CancellationToken stoppingToken)
     {
-        const int LogEveryReports = 5;
-
-        readonly Lock counters = new();
-        long windowStart = Environment.TickCount64;
-        int bluetooth, wifi, bytes, reports;
-        int caughtUp, concealed, skipped, rebuffers, dropped; // since the service started
-        int bufferedMs, targetMs;
-        double driftPpm;
-        // What makes the sound break: the output running dry, and this thread being kept from its work.
-        int underruns;
-        long lastPlayed, longestGapMs;
-
-        public bool NativeCodec { get; set; }
-
-        public Links Links { get; set; }
-
-        public void CaughtUp() => Count(ref caughtUp);
-
-        public void Concealed() => Count(ref concealed);
-
-        public void Skipped() => Count(ref skipped);
-
-        public void Rebuffered() => Count(ref rebuffers);
-
-        public void Dropped() => Count(ref dropped);
-
-        void Count(ref int counter)
+        while (!packets.Completion.IsCompleted && !stoppingToken.IsCancellationRequested)
         {
-            lock (counters)
-                counter++;
-        }
-
-        /// <summary>From the playback thread, once per packet played.</summary>
-        public void Playing(int buffered, int target, double drift, int outputUnderruns)
-        {
-            lock (counters)
-            {
-                (bufferedMs, targetMs, driftPpm, underruns) = (buffered, target, drift, outputUnderruns);
-                long now = Environment.TickCount64;
-                if (lastPlayed != 0)
-                    longestGapMs = Math.Max(longestGapMs, now - lastPlayed);
-                lastPlayed = now;
-            }
-        }
-
-        public void Received(Links link, int packetBytes)
-        {
-            lock (counters)
-            {
-                if (link == Links.Bluetooth)
-                    bluetooth++;
-                else
-                    wifi++;
-                bytes += packetBytes + 6;
-            }
-        }
-
-        /// <summary>
-        /// Once a second, on a timer rather than on reception: when nothing arrives (music paused, link lost)
-        /// the screen must show 0 frames/s, not the last good figures.
-        /// </summary>
-        public void Publish()
-        {
-            lock (counters)
-            {
-                long elapsed = Math.Max(1, Environment.TickCount64 - windowStart);
-                // 50 frames/s on a link means it keeps up with real time on its own.
-                var report = new ListenerReport(NativeCodec, Links, bluetooth * 1000.0 / elapsed, wifi * 1000.0 / elapsed,
-                    (int)(bytes * 8.0 / elapsed), bufferedMs, targetMs, driftPpm, caughtUp, concealed, skipped, rebuffers, dropped);
-                DiagnosticsHub.Publish(report);
-                if (++reports % LogEveryReports == 0)
-                {
-                    Log.Info(AuraLog.Tag, $"rx bluetooth {report.BluetoothFramesPerSecond:F0} + wifi {report.WifiFramesPerSecond:F0} frames/s, "
-                        + $"{report.Kbps} kbps, buffer {bufferedMs}/{targetMs} ms, drift {driftPpm:+0;-0} ppm, caught up {caughtUp}, "
-                        + $"concealed {concealed}, skipped {skipped}, rebuffers {rebuffers}, dropped {dropped}, "
-                        + $"underruns {underruns}, longest gap {longestGapMs} ms, gc {GC.CollectionCount(0)}/{GC.CollectionCount(1)}/{GC.CollectionCount(2)}");
-                    longestGapMs = 0;
-                }
-                windowStart = Environment.TickCount64;
-                bluetooth = wifi = bytes = 0;
-            }
+            arrived.Reset();
+            if (packets.Count >= frames)
+                return;
+            arrived.Wait(IdleCheck);
         }
     }
 

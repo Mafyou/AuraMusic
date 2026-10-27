@@ -12,7 +12,7 @@ sealed class LanServer(uint session, string name) : IDisposable
     const int WriteTimeoutMs = 3_000;
 
     /// <summary>Interfaces of the mobile network: a beacon sent there reaches nobody and costs data.</summary>
-    static readonly FrozenSet<string> MobileDataPrefixes = ["rmnet", "ccmni", "pdp", "v4-", "clat", "dummy", "tun"];
+    static readonly ImmutableArray<string> MobileDataPrefixes = ["rmnet", "ccmni", "pdp", "v4-", "clat", "dummy", "tun"];
 
     readonly TcpListener tcp = new(IPAddress.Any, 0);
     readonly UdpClient anyInterface = new() { EnableBroadcast = true };
@@ -59,13 +59,21 @@ sealed class LanServer(uint session, string name) : IDisposable
         {
             if (nic.OperationalStatus != OperationalStatus.Up
                 || nic.NetworkInterfaceType == NetworkInterfaceType.Loopback
-                || MobileDataPrefixes.Any(prefix => nic.Name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)))
+                || IsMobileData(nic.Name))
                 continue;
 
             foreach (var unicast in nic.GetIPProperties().UnicastAddresses)
                 if (unicast.Address.AddressFamily == AddressFamily.InterNetwork && !IPAddress.IsLoopback(unicast.Address))
                     yield return (unicast.Address, LanBeacon.DirectedBroadcast(unicast.Address, Math.Clamp(unicast.PrefixLength, 0, 32)));
         }
+    }
+
+    static bool IsMobileData(string interfaceName)
+    {
+        foreach (var prefix in MobileDataPrefixes)
+            if (interfaceName.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                return true;
+        return false;
     }
 
     async Task AcceptAsync(Action<Stream, Action> onListener, CancellationToken stoppingToken)
