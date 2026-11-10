@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net11.0</TargetFramework>
+    <TargetFramework>$(NetTargetFramework)</TargetFramework>
     <!-- LibraryImport generates unsafe marshalling code for the libopus bridge. -->
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
@@ -13,6 +13,6 @@
 
 
   <ItemGroup>
-    <PackageReference Include="Concentus" Version="2.2.2" />
+    <PackageReference Include="Concentus" />
   </ItemGroup>
 </Project>

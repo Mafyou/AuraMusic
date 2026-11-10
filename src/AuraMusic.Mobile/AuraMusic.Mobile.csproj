@@ -2,7 +2,7 @@
 
 	<PropertyGroup>
 		<!-- Android only: playback capture is an Android 10+ API, and both phones are Android. -->
-		<TargetFrameworks>net11.0-android</TargetFrameworks>
+		<TargetFrameworks>$(NetTargetFramework)-android</TargetFrameworks>
 
 		<OutputType>Exe</OutputType>
 		<RootNamespace>AuraMusic.Mobile</RootNamespace>
@@ -28,7 +28,7 @@
 			publishes exactly that number. The version code Android and the Play Store compare follows from it
 			(1.7.8 gives 10708), so it grows with every release, wherever the build is made.
 		-->
-		<ApplicationDisplayVersion>1.7.18</ApplicationDisplayVersion>
+		<ApplicationDisplayVersion>1.7.19</ApplicationDisplayVersion>
 		<VersionMajor>$([System.Version]::Parse('$(ApplicationDisplayVersion)').Major)</VersionMajor>
 		<VersionMinor>$([System.Version]::Parse('$(ApplicationDisplayVersion)').Minor)</VersionMinor>
 		<VersionPatch>$([System.Version]::Parse('$(ApplicationDisplayVersion)').Build)</VersionPatch>
@@ -74,10 +74,10 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<PackageReference Include="CommunityToolkit.Maui" Version="15.0.1" />
-		<PackageReference Include="Microsoft.Maui.Controls" Version="$(MauiVersion)" />
-		<PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="11.0.0-rc.1.26425.128" />
-		<PackageReference Include="OpusSharp.Natives" Version="1.6.1.4" />
+		<PackageReference Include="CommunityToolkit.Maui" />
+		<PackageReference Include="Microsoft.Maui.Controls" />
+		<PackageReference Include="Microsoft.Extensions.Logging.Debug" />
+		<PackageReference Include="OpusSharp.Natives" />
 	</ItemGroup>
 
 	<ItemGroup>

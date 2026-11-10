@@ -1,0 +1,30 @@
+<Project>
+
+	<!-- Versions of every NuGet package used by the projects of the repository: csproj files reference
+	     packages without a version. -->
+	<PropertyGroup>
+		<ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+		<!-- The versions below also apply to the packages that only come transitively -->
+		<CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
+
+		<!-- The MAUI version, set here rather than taken from the installed workload, so that every machine
+		     builds with the same one. The MAUI SDK only fills MauiVersion when it is empty, so its implicit
+		     packages (Microsoft.Maui.Core, Resizetizer...) follow this value too. -->
+		<MauiVersion>11.0.0-rc.2.26505.5</MauiVersion>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<PackageVersion Include="CommunityToolkit.Maui" Version="16.0.0" />
+		<PackageVersion Include="Concentus" Version="2.2.2" />
+		<PackageVersion Include="coverlet.collector" Version="10.1.0" />
+		<PackageVersion Include="Microsoft.Extensions.Logging.Debug" Version="11.0.0-rc.3.26522.148" />
+		<PackageVersion Include="Microsoft.Maui.Controls" Version="$(MauiVersion)" />
+		<PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.11.0" />
+		<PackageVersion Include="Moq" Version="4.21.0" />
+		<PackageVersion Include="OpusSharp.Natives" Version="1.6.1.4" />
+		<PackageVersion Include="Shouldly" Version="4.3.0" />
+		<PackageVersion Include="xunit.runner.visualstudio" Version="4.0.1" />
+		<PackageVersion Include="xunit.v3" Version="4.0.3" />
+	</ItemGroup>
+
+</Project>
