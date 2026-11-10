@@ -31,7 +31,7 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: ~/.nuget/packages
-          key: nuget-kernel-${{ hashFiles('**/*.csproj', 'Directory.Build.props', 'global.json') }}
+          key: nuget-kernel-${{ hashFiles('**/*.csproj', 'Directory.Build.props', 'Directory.Packages.props', 'global.json') }}
           restore-keys: nuget-kernel-
 
       - name: Build
@@ -82,7 +82,7 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: ~/.nuget/packages
-          key: nuget-android-${{ hashFiles('**/*.csproj', 'Directory.Build.props', 'global.json') }}
+          key: nuget-android-${{ hashFiles('**/*.csproj', 'Directory.Build.props', 'Directory.Packages.props', 'global.json') }}
           restore-keys: nuget-android-
 
       - name: Install the MAUI Android workload
