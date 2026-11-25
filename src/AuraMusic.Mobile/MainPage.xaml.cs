@@ -3,7 +3,7 @@
     public partial class MainPage : ContentPage
     {
         // Only on launch, not when the page is rebuilt after a language switch.
-        static bool splashShown, tutorialOffered, updateOffered, updating;
+        static bool tutorialOffered, updateOffered, updating;
 
         // Below this the logo is a smudge: better none (a 360 x 640 screen while listening).
         const double MinArtworkHeight = 96;
@@ -18,15 +18,10 @@
             // hiding it cannot make room that would bring it back.
             ArtworkSlot.SizeChanged += (_, _) => Artwork.IsVisible = ArtworkSlot.Height >= MinArtworkHeight;
             LanguageButton.Text = $"🌐 {AppLanguages.Next(LanguageSettings.Current).ToUpperInvariant()}";
-            VersionLabel.Text = $"v{AppInfo.Current.VersionString}";
             // Nothing to pull for where the store updates the app. IsRefreshEnabled, never IsEnabled: MAUI passes
             // IsEnabled down to every child, and the RefreshView holds the whole home screen, so a disabled one
             // left every button of the Play Store build dead to taps (seen on Android 17).
             UpdateRefresh.IsRefreshEnabled = AppUpdater.SelfUpdates;
-#if DEBUG
-            // A test build shows the version being worked on, not a published one, and never updates itself.
-            VersionLabel.Text += " · dev";
-#endif
             // Maximum first: a slider refuses a minimum above its current maximum of 1.
             SyncSlider.Maximum = PlayoutTuning.MaxLatencyMs;
             SyncSlider.Minimum = PlayoutTuning.MinLatencyMs;
@@ -56,27 +51,14 @@
             SpectrumHub.Updated += OnSpectrum;
             Render(AuraHub.Current);
 
-            try
-            {
-                if (!splashShown)
-                {
-                    splashShown = true;
-                    await Task.Delay(TimeSpan.FromSeconds(2));
-                    await SplashOverlay.FadeToAsync(0, 400);
-                }
-            }
-            finally
-            {
-                // The splash covers the whole page, even faded to nothing: it must leave the layout whatever
-                // became of the fade, and on every later appearance (back from the tutorial, the diagnostics).
-                SplashOverlay.IsVisible = false;
-            }
-
             // Once per launch: this page appears again when the tutorial closes, and must not reopen it then
             // even if it was dismissed in a way that did not mark it seen.
             if (!TutorialPage.HasBeenSeen && !tutorialOffered && Navigation.ModalStack.Count == 0)
             {
                 tutorialOffered = true;
+                // A modal page opens in a window of its own, which would cover the launch splash: it waits for the
+                // splash to go (the update dialog waits in MatrixDialog)
+                await BrandSplash.LetPopupThroughAsync();
                 var tutorial = new TutorialPage();
                 await Navigation.PushModalAsync(tutorial);
                 await tutorial.Closed; // a first launch must be offered updates too, once the tutorial is done

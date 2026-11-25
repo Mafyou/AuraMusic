@@ -22,6 +22,10 @@ static class BackKey
     {
         public override void HandleOnBackPressed()
         {
+            // During the launch splash, Back opens the app: it never reaches the page nobody sees yet. The splash has
+            // its own callback, asked first; this one may be asked first once the app is back from the background.
+            if (BrandSplash.Skip()) return;
+
             try
             {
                 // The window hands Back to what is on display, as MAUI does: a modal page closes, the home page

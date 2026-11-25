@@ -47,6 +47,9 @@ public sealed class MatrixDialog : Popup<bool>
     /// <returns><see langword="true"/> when the user picked <paramref name="accept"/>.</returns>
     public static async Task<bool> ShowAsync(Page page, string title, string message, string accept, string? cancel = null)
     {
+        // A popup opens in a window of its own, which would cover the launch splash: it waits for the splash to go
+        await BrandSplash.LetPopupThroughAsync();
+
         var options = new PopupOptions
         {
             CanBeDismissedByTappingOutsideOfPopup = cancel is not null,
