@@ -31,4 +31,20 @@
     <Color x:Key="MatrixHead">#C8FFE0</Color>
     <Color x:Key="MatrixSpectrumLit">#DD00C853</Color>
     <Color x:Key="MatrixSpectrumUnlit">#1400C853</Color>
+
+    <!--
+        Launch splash (Controls/BrandSplash.cs), read by BrandSplashView: the layout of every Mafyou IT app, in the
+        colours of AuraMusic. Background = MatrixBackground (also the system splash colour), name = MatrixMint (the
+        text of the app), signature and Skip = MatrixGreenDim (its captions), frame around the name and progress
+        line = MatrixGreen (what can be tapped, the primary button). The app has one look whatever the phone's theme:
+        light repeats dark.
+    -->
+    <Color x:Key="BrandSplashBackgroundLight">#000C08</Color>
+    <Color x:Key="BrandSplashBackgroundDark">#000C08</Color>
+    <Color x:Key="BrandSplashTitleLight">#D2FFE2</Color>
+    <Color x:Key="BrandSplashTitleDark">#D2FFE2</Color>
+    <Color x:Key="BrandSplashSignatureLight">#1F9E55</Color>
+    <Color x:Key="BrandSplashSignatureDark">#1F9E55</Color>
+    <Color x:Key="BrandSplashAccentLight">#00FF66</Color>
+    <Color x:Key="BrandSplashAccentDark">#00FF66</Color>
 </ResourceDictionary>

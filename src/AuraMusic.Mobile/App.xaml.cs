@@ -22,7 +22,12 @@
 
         protected override Window CreateWindow(IActivationState? activationState)
         {
-            return new Window(new AppShell());
+            var window = new Window(new AppShell());
+            // Once per process: the activity a notification reopens while a broadcast or a listening runs on in its
+            // service opens straight onto the app. It goes once the home page is on display and laid out. The name in
+            // the terminal font of the app's titles (MatrixFont, Styles.xaml).
+            BrandSplash.ShowOver<MainPage>(window, "AuraMusic", nameFont: (string)Resources["MatrixFont"]);
+            return window;
         }
     }
 }
