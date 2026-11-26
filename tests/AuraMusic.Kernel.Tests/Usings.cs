@@ -2,6 +2,8 @@ global using System.Collections.Immutable;
 global using System.Globalization;
 global using System.Net;
 global using System.Text;
+global using System.Text.RegularExpressions;
+global using System.Xml.Linq;
 global using AuraMusic.Kernel.Codec;
 global using AuraMusic.Kernel.Diagnostics;
 global using AuraMusic.Kernel.Localization;

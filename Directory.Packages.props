@@ -10,16 +10,16 @@
 		<!-- The MAUI version, set here rather than taken from the installed workload, so that every machine
 		     builds with the same one. The MAUI SDK only fills MauiVersion when it is empty, so its implicit
 		     packages (Microsoft.Maui.Core, Resizetizer...) follow this value too. -->
-		<MauiVersion>11.0.0-rc.2.26505.5</MauiVersion>
+		<MauiVersion>11.0.10</MauiVersion>
 	</PropertyGroup>
 
 	<ItemGroup>
-		<PackageVersion Include="CommunityToolkit.Maui" Version="16.0.0" />
-		<PackageVersion Include="Concentus" Version="2.2.2" />
-		<PackageVersion Include="coverlet.collector" Version="10.1.0" />
-		<PackageVersion Include="Microsoft.Extensions.Logging.Debug" Version="11.0.0-rc.3.26522.148" />
+		<PackageVersion Include="CommunityToolkit.Maui" Version="17.0.0" />
+		<PackageVersion Include="Concentus" Version="2.2.3" />
+		<PackageVersion Include="coverlet.collector" Version="10.1.1" />
+		<PackageVersion Include="Microsoft.Extensions.Logging.Debug" Version="11.0.0" />
 		<PackageVersion Include="Microsoft.Maui.Controls" Version="$(MauiVersion)" />
-		<PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.11.0" />
+		<PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.12.0" />
 		<PackageVersion Include="Moq" Version="4.21.0" />
 		<PackageVersion Include="OpusSharp.Natives" Version="1.6.1.4" />
 		<PackageVersion Include="Shouldly" Version="4.3.0" />
