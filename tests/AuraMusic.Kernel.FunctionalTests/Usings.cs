@@ -1,0 +1,15 @@
+global using System.Collections.Concurrent;
+global using System.Collections.Immutable;
+global using System.Net;
+global using System.Net.Sockets;
+global using System.Threading.Channels;
+global using AuraMusic.Kernel.Codec;
+global using AuraMusic.Kernel.Diagnostics;
+global using AuraMusic.Kernel.FunctionalTests.Stations;
+global using AuraMusic.Kernel.Multipath;
+global using AuraMusic.Kernel.Playout;
+global using AuraMusic.Kernel.Protocol;
+global using AuraMusic.Kernel.State;
+global using Moq;
+global using Shouldly;
+global using Xunit;

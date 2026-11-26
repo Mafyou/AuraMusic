@@ -1,7 +1,7 @@
 name: Pull request checks
 
-# Every pull request: the Kernel tests, and the Android app must still build. The protection of main
-# requires both jobs by name ("Kernel tests", "Android build") before a merge.
+# Every pull request: the Kernel tests (unit, integration, functional), and the Android app must still
+# build. The protection of main requires both jobs by name ("Kernel tests", "Android build") before a merge.
 # Warnings fail the build, so "0 warning" is checked here rather than by eye.
 on:
   pull_request:
@@ -18,7 +18,7 @@ jobs:
   kernel:
     name: Kernel tests
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
@@ -58,11 +58,22 @@ jobs:
           key: nuget-kernel-${{ hashFiles('**/*.csproj', 'Directory.Build.props', 'Directory.Packages.props', 'global.json') }}
           restore-keys: nuget-kernel-
 
+      # Unit (one class, its collaborators mocked), integration (real collaborators over loopback sockets, real HTTP
+      # and storage) and functional (master and listener journeys end to end, only the phone's platform replaced).
       - name: Build
-        run: dotnet build tests/AuraMusic.Kernel.Tests -p:TreatWarningsAsErrors=true
+        run: |
+          dotnet build tests/AuraMusic.Kernel.UnitTests -p:TreatWarningsAsErrors=true
+          dotnet build tests/AuraMusic.Kernel.IntegrationTests -p:TreatWarningsAsErrors=true
+          dotnet build tests/AuraMusic.Kernel.FunctionalTests -p:TreatWarningsAsErrors=true
 
-      - name: Test
-        run: dotnet test --project tests/AuraMusic.Kernel.Tests --no-build
+      - name: Unit tests
+        run: dotnet test --project tests/AuraMusic.Kernel.UnitTests --no-build
+
+      - name: Integration tests
+        run: dotnet test --project tests/AuraMusic.Kernel.IntegrationTests --no-build
+
+      - name: Functional tests
+        run: dotnet test --project tests/AuraMusic.Kernel.FunctionalTests --no-build
 
   android:
     name: Android build

@@ -1,8 +1,9 @@
 name: Release AuraMusic APK
 
-# Started by hand only (Actions › Release AuraMusic APK › Run workflow, on main): the Kernel tests, then
-# the signed APK attached to a new GitHub release, which the app offers to every phone at its next launch,
-# and the Play Store bundle (AAB) kept as an artifact of the run, to upload in the Play Console.
+# Started by hand only (Actions › Release AuraMusic APK › Run workflow, on main): the Kernel tests
+# (unit, integration, functional), then the signed APK attached to a new GitHub release, which the app offers
+# to every phone at its next launch, and the Play Store bundle (AAB) kept as an artifact of the run, to upload
+# in the Play Console.
 # The version is the one written in AuraMusic.Mobile.csproj: raise it there, in a pull request, first.
 # Warnings fail the build, so "0 warning" is checked here rather than by eye.
 on:
@@ -20,7 +21,7 @@ jobs:
   kernel:
     name: Kernel tests
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
@@ -34,11 +35,22 @@ jobs:
           key: nuget-kernel-${{ hashFiles('**/*.csproj', 'Directory.Build.props', 'Directory.Packages.props', 'global.json') }}
           restore-keys: nuget-kernel-
 
+      # Unit (one class, its collaborators mocked), integration (real collaborators over loopback sockets, real HTTP
+      # and storage) and functional (master and listener journeys end to end, only the phone's platform replaced).
       - name: Build
-        run: dotnet build tests/AuraMusic.Kernel.Tests -p:TreatWarningsAsErrors=true
+        run: |
+          dotnet build tests/AuraMusic.Kernel.UnitTests -p:TreatWarningsAsErrors=true
+          dotnet build tests/AuraMusic.Kernel.IntegrationTests -p:TreatWarningsAsErrors=true
+          dotnet build tests/AuraMusic.Kernel.FunctionalTests -p:TreatWarningsAsErrors=true
 
-      - name: Test
-        run: dotnet test --project tests/AuraMusic.Kernel.Tests --no-build
+      - name: Unit tests
+        run: dotnet test --project tests/AuraMusic.Kernel.UnitTests --no-build
+
+      - name: Integration tests
+        run: dotnet test --project tests/AuraMusic.Kernel.IntegrationTests --no-build
+
+      - name: Functional tests
+        run: dotnet test --project tests/AuraMusic.Kernel.FunctionalTests --no-build
 
   release:
     name: Release
