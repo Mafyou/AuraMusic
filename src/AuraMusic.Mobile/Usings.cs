@@ -31,6 +31,7 @@ global using AuraMusic.Kernel.State;
 global using AuraMusic.Kernel.Updates;
 global using AuraMusic.Mobile.Casting;
 global using AuraMusic.Mobile.Controls;
+global using AuraMusic.Mobile.Extensions;
 global using AuraMusic.Mobile.Resources.Strings;
 global using AuraMusic.Mobile.Updates;
 global using CommunityToolkit.Maui.Extensions;
