@@ -48,6 +48,10 @@ sealed class LanServer(uint session, string name) : IDisposable
             {
                 // Not on Wi-Fi right now: keep announcing, it may come back.
             }
+            catch (Exception ex) when (stoppingToken.IsCancellationRequested && ex is System.OperationCanceledException or ObjectDisposedException)
+            {
+                return; // stopping cancelled the send, or disposed the socket under it
+            }
             await Task.Delay(BeaconInterval, stoppingToken).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
         }
     }

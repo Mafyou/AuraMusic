@@ -90,7 +90,7 @@ public sealed class ListenService : Service
 
         cts = new CancellationTokenSource();
         var stoppingToken = cts.Token;
-        new Thread(() => Play(packets.Reader, arrived, stats, gain, stoppingToken)) { IsBackground = true, Name = "AuraMusic playback" }.Start();
+        new Thread(() => PlayGuarded(stoppingToken)) { IsBackground = true, Name = "AuraMusic playback" }.Start();
         reportTimer = new Timer(_ => PublishStats(), null, ReportInterval, ReportInterval);
         // Its own thread, not the pool's: connecting and reading block for as long as the link lasts.
         new Thread(() => BluetoothLoop(stoppingToken)) { IsBackground = true, Name = "AuraMusic from Bluetooth" }.Start();
@@ -264,6 +264,11 @@ public sealed class ListenService : Service
         {
             // Stopping, or the beacon port is unavailable: Bluetooth alone carries the stream.
         }
+        catch (Exception ex)
+        {
+            // Anything else ends the Wi-Fi side, which ran as a task nobody awaits: logged rather than lost.
+            Log.Error(AuraLog.Tag, $"Wi-Fi link gave up: {ex}");
+        }
         finally
         {
             multicast?.Release();
@@ -423,6 +428,28 @@ public sealed class ListenService : Service
         {
             if (bluetoothLinks + wifiLinks == 0 && !(cts?.IsCancellationRequested ?? true))
                 AuraHub.Publish(new Searching(problem));
+        }
+    }
+
+    /// <summary>
+    /// The playback thread. On a thread of its own an exception takes the whole app down, and there is nothing to
+    /// listen with once the output failed: said on screen, and the service stops.
+    /// </summary>
+    void PlayGuarded(CancellationToken stoppingToken)
+    {
+        try
+        {
+            Play(packets.Reader, arrived, stats, gain, stoppingToken);
+        }
+        catch (Exception ex) when (!stoppingToken.IsCancellationRequested)
+        {
+            Log.Error(AuraLog.Tag, $"Playback failed: {ex}");
+            AuraHub.Publish(new Failed(ex.Message));
+            StopSelf();
+        }
+        catch (Exception)
+        {
+            // Stopping released what the playback was using under it.
         }
     }
 

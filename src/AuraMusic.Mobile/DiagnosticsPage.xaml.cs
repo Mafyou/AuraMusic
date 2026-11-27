@@ -1,68 +1,79 @@
-namespace AuraMusic.Mobile
+namespace AuraMusic.Mobile;
+
+/// <summary>What the app is doing right now, in figures. Opened by double-tapping the artwork of the home screen.</summary>
+public partial class DiagnosticsPage : ContentPage
 {
-    /// <summary>What the app is doing right now, in figures. Opened by double-tapping the artwork of the home screen.</summary>
-    public partial class DiagnosticsPage : ContentPage
+    const int LabelWidth = 22;
+
+    // The same for as long as the page is open: asked of Android once, not at every refresh.
+    readonly string phone = $"{DeviceName.Of(Platform.AppContext)} · {DeviceName.Id.ToString("N")[..8]}";
+
+    public DiagnosticsPage()
     {
-        const int LabelWidth = 22;
+        InitializeComponent();
+        Render();
+    }
 
-        // The same for as long as the page is open: asked of Android once, not at every refresh.
-        readonly string phone = $"{DeviceName.Of(Platform.AppContext)} · {DeviceName.Id.ToString("N")[..8]}";
+    protected override void OnAppearing()
+    {
+        base.OnAppearing();
+        // Removed first: never subscribed twice, whatever the order the lifecycle events come in.
+        DiagnosticsHub.Updated -= OnUpdated;
+        DiagnosticsHub.Updated += OnUpdated;
+        AuraHub.StateChanged -= OnStateChanged;
+        AuraHub.StateChanged += OnStateChanged;
+        Render();
+    }
 
-        public DiagnosticsPage()
-        {
-            InitializeComponent();
-            Render();
-        }
+    protected override void OnDisappearing()
+    {
+        DiagnosticsHub.Updated -= OnUpdated;
+        AuraHub.StateChanged -= OnStateChanged;
+        base.OnDisappearing();
+    }
 
-        protected override void OnAppearing()
-        {
-            base.OnAppearing();
-            DiagnosticsHub.Updated += OnUpdated;
-            AuraHub.StateChanged += OnStateChanged;
-            Render();
-        }
+    void OnUpdated(DiagnosticsReport report) => Dispatcher.Dispatch(Render);
 
-        protected override void OnDisappearing()
-        {
-            DiagnosticsHub.Updated -= OnUpdated;
-            AuraHub.StateChanged -= OnStateChanged;
-            base.OnDisappearing();
-        }
+    void OnStateChanged(AuraState state) => Dispatcher.Dispatch(Render);
 
-        void OnUpdated(DiagnosticsReport report) => Dispatcher.Dispatch(Render);
+    void Render()
+    {
+        var text = new StringBuilder();
+        void Line(string label, string value) => text.Append(label.PadRight(LabelWidth)).AppendLine(value);
 
-        void OnStateChanged(AuraState state) => Dispatcher.Dispatch(Render);
+        Line("app", $"AuraMusic {AppInfo.Current.VersionString} ({LanguageSettings.Current})");
+        Line("phone", phone);
+        Line("state", DescribeState(AuraHub.Current));
+        Line("sync target", $"{PlayoutTuning.TargetLatencyMs} ms");
+        text.AppendLine();
 
-        void Render()
-        {
-            var text = new StringBuilder();
-            void Line(string label, string value) => text.Append(label.PadRight(LabelWidth)).AppendLine(value);
+        var lines = DiagnosticsText.Lines(DiagnosticsHub.Current);
+        if (lines.IsEmpty)
+            text.Append(AppStrings.DiagnosticsIdle);
+        foreach (var (label, value) in lines)
+            Line(label, value);
 
-            Line("app", $"AuraMusic {AppInfo.Current.VersionString} ({LanguageSettings.Current})");
-            Line("phone", phone);
-            Line("state", DescribeState(AuraHub.Current));
-            Line("sync target", $"{PlayoutTuning.TargetLatencyMs} ms");
-            text.AppendLine();
+        Report.Text = text.ToString();
+    }
 
-            var lines = DiagnosticsText.Lines(DiagnosticsHub.Current);
-            if (lines.IsEmpty)
-                text.Append(AppStrings.DiagnosticsIdle);
-            foreach (var (label, value) in lines)
-                Line(label, value);
+    static string DescribeState(AuraState state) => state switch
+    {
+        Idle => "idle",
+        Advertising => "sharing, nobody listening",
+        Streaming(var listeners) => $"sharing to {string.Join(", ", listeners)}",
+        Searching(var problem) => problem is null ? "searching" : $"searching ({problem})",
+        Listening(var master, var links) => $"listening to {master} via {DiagnosticsText.Describe(links)}",
+        Failed(var reason) => $"failed: {reason}",
+    };
 
-            Report.Text = text.ToString();
-        }
+    bool closing;
 
-        static string DescribeState(AuraState state) => state switch
-        {
-            Idle => "idle",
-            Advertising => "sharing, nobody listening",
-            Streaming(var listeners) => $"sharing to {string.Join(", ", listeners)}",
-            Searching(var problem) => problem is null ? "searching" : $"searching ({problem})",
-            Listening(var master, var links) => $"listening to {master} via {DiagnosticsText.Describe(links)}",
-            Failed(var reason) => $"failed: {reason}",
-        };
-
-        async void OnCloseClicked(object? sender, EventArgs e) => await Navigation.PopModalAsync();
+    async void OnCloseClicked(object? sender, EventArgs e)
+    {
+        // A double tap popped twice: the second pop had nothing of this page's left to close.
+        if (closing)
+            return;
+        closing = true;
+        await Navigation.PopModalAsync();
     }
 }
