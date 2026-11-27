@@ -117,4 +117,25 @@ public sealed class AppLanguagesTests
     {
         AppLanguages.SwitchOrder.ShouldBe(AppLanguages.Supported, ignoreOrder: true);
     }
+
+    // The language picked for the app in the Android settings (App languages) comes before the phone's
+    [Theory]
+    [InlineData("en-US", "fr-FR", "en")]
+    [InlineData("en-GB,fr-FR", "fr-FR", "en")]
+    [InlineData("de-DE", "fr-FR", "fr")]
+    [InlineData("de-DE", "en-US", "fr")]
+    [InlineData("fr-FR", "en-US", "fr")]
+    [InlineData("", "en-US", "en")]
+    [InlineData("", "fr-FR", "fr")]
+    [InlineData(null, "en-GB", "en")]
+    [InlineData("not a language!", "en-US", "en")]
+    public void Resolve_WithoutASavedChoice_FollowsTheAppLanguage_ThenThePhone(string? appLanguage, string phone, string expected) =>
+        AppLanguages.Resolve(null, AppLanguages.SystemCulture(appLanguage, CultureInfo.GetCultureInfo(phone))).ShouldBe(expected);
+
+    [Theory]
+    [InlineData("fr", "en-US")]
+    [InlineData("en", "de-DE")]
+    [InlineData("en", "")]
+    public void Resolve_TheLanguageChosenInTheApp_WinsOverTheAppLanguage(string saved, string appLanguage) =>
+        AppLanguages.Resolve(saved, AppLanguages.SystemCulture(appLanguage, CultureInfo.GetCultureInfo("fr-FR"))).ShouldBe(saved);
 }

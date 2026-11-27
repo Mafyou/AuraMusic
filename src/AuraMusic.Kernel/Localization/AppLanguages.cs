@@ -11,6 +11,27 @@ public static class AppLanguages
 
     public static readonly FrozenSet<string> Supported = SwitchOrder.ToFrozenSet(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// The culture the system gives the app: the language picked for it in the settings (Android 13+, App languages,
+    /// given as tags such as "en-US,fr-FR"), the phone's when none is picked or the tags are unknown. Read at start-up;
+    /// the app starts again when it changes while it runs (Android, AppLanguageTags).
+    /// </summary>
+    public static CultureInfo SystemCulture(string? appLanguageTags, CultureInfo phoneCulture)
+    {
+        var first = appLanguageTags?.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).FirstOrDefault();
+        if (string.IsNullOrEmpty(first)) return phoneCulture;
+
+        try
+        {
+            var culture = CultureInfo.GetCultureInfo(first);
+            return string.IsNullOrEmpty(culture.Name) ? phoneCulture : culture;
+        }
+        catch (CultureNotFoundException)
+        {
+            return phoneCulture;
+        }
+    }
+
     /// <summary>The saved choice when there is one, else the phone's language. A saved value that is neither fr nor en
     /// (an old format, garbage) reads as French rather than falling back to the phone.</summary>
     public static string Resolve(string? chosen, CultureInfo device) =>

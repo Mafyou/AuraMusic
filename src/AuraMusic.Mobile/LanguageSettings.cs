@@ -6,8 +6,16 @@ static class LanguageSettings
 {
     const string PreferenceKey = "language";
 
-    // Captured before we override it, so "follow the phone" keeps meaning the phone.
-    static readonly CultureInfo DeviceCulture = CultureInfo.CurrentUICulture;
+    // Captured before we override it, so "follow the phone" keeps meaning the phone: the language picked for the app
+    // under App languages (Android 13+), the phone's when none. iOS gives the language picked for the app through the
+    // preferred languages, which .NET reads.
+    static readonly CultureInfo DeviceCulture = AppLanguages.SystemCulture(
+#if ANDROID
+        AppLanguageTags.Read(),
+#else
+        null,
+#endif
+        CultureInfo.CurrentUICulture);
 
     public static string Current { get; private set; } = AppLanguages.Default;
 
