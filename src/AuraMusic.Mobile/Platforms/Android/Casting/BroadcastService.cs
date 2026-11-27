@@ -93,11 +93,56 @@ public sealed class BroadcastService : Service
         var stoppingToken = cts.Token;
         new Thread(() => AcceptLoop(stoppingToken)) { IsBackground = true, Name = "AuraMusic accept" }.Start();
         StartLan(stoppingToken);
-        captureThread = new Thread(() => CaptureLoop(stoppingToken)) { IsBackground = true, Name = "AuraMusic capture" };
+        captureThread = new Thread(() => Guarded("capture", () => CaptureLoop(stoppingToken), stoppingToken)) { IsBackground = true, Name = "AuraMusic capture" };
         captureThread.Start();
-        _ = Task.Run(() => EncodeLoop(stoppingToken));
+        _ = Task.Run(() => GuardedAsync("encoder", () => EncodeLoop(stoppingToken), stoppingToken));
 
         AuraHub.Publish(new Advertising());
+    }
+
+    /// <summary>
+    /// Runs a loop of the broadcast on its own thread. On such a thread an exception takes the whole app down, and the
+    /// broadcast cannot go on without its capture anyway: said on screen, and the service stops.
+    /// </summary>
+    void Guarded(string loop, Action run, CancellationToken stoppingToken)
+    {
+        try
+        {
+            run();
+        }
+        catch (Exception ex)
+        {
+            Fail(loop, ex, stoppingToken);
+        }
+    }
+
+    /// <summary>
+    /// The same for the encoder, on the thread pool: left to itself it died silently, the phone capturing on while
+    /// its listeners heard nothing.
+    /// </summary>
+    async Task GuardedAsync(string loop, Func<Task> run, CancellationToken stoppingToken)
+    {
+        try
+        {
+            await run();
+        }
+        catch (System.OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            // Stopping.
+        }
+        catch (Exception ex)
+        {
+            Fail(loop, ex, stoppingToken);
+        }
+    }
+
+    void Fail(string loop, Exception ex, CancellationToken stoppingToken)
+    {
+        if (stoppingToken.IsCancellationRequested)
+            return; // stopping released what the loop was using under it
+        Log.Error(AuraLog.Tag, $"Broadcast {loop} failed: {ex}");
+        AuraHub.Publish(new Failed(ex.Message));
+        StopSelf();
     }
 
     static AudioRecord CreateRecorder(MediaProjection projection)
