@@ -4,6 +4,8 @@
     <Project Path="src/AuraMusic.Mobile/AuraMusic.Mobile.csproj" />
   </Folder>
   <Folder Name="/tests/">
-    <Project Path="tests/AuraMusic.Kernel.Tests/AuraMusic.Kernel.Tests.csproj" />
+    <Project Path="tests/AuraMusic.Kernel.FunctionalTests/AuraMusic.Kernel.FunctionalTests.csproj" />
+    <Project Path="tests/AuraMusic.Kernel.IntegrationTests/AuraMusic.Kernel.IntegrationTests.csproj" />
+    <Project Path="tests/AuraMusic.Kernel.UnitTests/AuraMusic.Kernel.UnitTests.csproj" />
   </Folder>
 </Solution>

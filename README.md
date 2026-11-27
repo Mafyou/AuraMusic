@@ -64,12 +64,17 @@ Hors de la maison, sans Wi-Fi commun : l'un active son partage de connexion et l
   - `Navigation/` : `DoubleBackToExit`, le double appui sur Retour avant de quitter l'app (le premier affiche un toast, le second dans les deux secondes quitte) ;
   - `Multipath/` : fusion des liens Bluetooth et Wi-Fi (`SequenceGate`), répartition côté master (`LinkRouter`), balise réseau (`LanBeacon`) et téléphones de confiance (`TrustedDevices`).
 - `src/AuraMusic.Mobile` : l'app. Code Android dans `Platforms/Android/Casting/` (`BroadcastService` côté master, `ListenService` côté écoute).
-- `tests/AuraMusic.Kernel.Tests` : tests unitaires xUnit v3 + Shouldly + Moq.
+- `tests/` : xUnit v3 + Shouldly + Moq, en trois projets :
+  - `AuraMusic.Kernel.UnitTests` : chaque classe seule, ses dépendances simulées par Moq ;
+  - `AuraMusic.Kernel.IntegrationTests` : les vraies classes branchées entre elles, sur de vraies sockets locales (protocole, Opus, balise UDP, fusion de deux liens), un vrai client HTTP face à un serveur local (mises à jour) et un vrai dossier temporaire (téléphones de confiance) ;
+  - `AuraMusic.Kernel.FunctionalTests` : des parcours complets entre un master et des auditeurs (Bluetooth, passage en Wi-Fi, Wi-Fi perdu, musique en pause, deux masters), montés comme les services Android avec les mêmes classes du noyau ; seule la plateforme est remplacée (RFCOMM par TCP local, capture et haut-parleur, préférences).
 - Chaque projet regroupe ses `global using` dans un `Usings.cs` à sa racine.
 - Apparence : toutes les couleurs sont dans `Resources/Styles/Colors.xaml`, tous les styles de composants dans `Resources/Styles/Styles.xaml` ; le code C# les lit par `Theme.Color` / `Theme.Style`.
 
 ```sh
-dotnet test --project tests/AuraMusic.Kernel.Tests
+dotnet test --project tests/AuraMusic.Kernel.UnitTests
+dotnet test --project tests/AuraMusic.Kernel.IntegrationTests
+dotnet test --project tests/AuraMusic.Kernel.FunctionalTests
 ```
 
 ### Déployer sur deux téléphones
